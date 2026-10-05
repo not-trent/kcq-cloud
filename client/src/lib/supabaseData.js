@@ -5,13 +5,17 @@ async function createSignedUrlMap(paths) {
   const uniquePaths = [...new Set(paths.filter(Boolean))];
   if (!uniquePaths.length) return {};
 
-  const { data, error } = await supabase.storage.from('screenshots').createSignedUrls(uniquePaths, 60 * 60);
-  if (error) throw error;
-
   const map = {};
-  data.forEach((item, index) => {
-    map[uniquePaths[index]] = item.signedUrl;
-  });
+  const batchSize = 1000;
+  for (let from = 0; from < uniquePaths.length; from += batchSize) {
+    const batch = uniquePaths.slice(from, from + batchSize);
+    const { data, error } = await supabase.storage.from('screenshots').createSignedUrls(batch, 60 * 60);
+    if (error) throw error;
+
+    data.forEach((item, index) => {
+      map[batch[index]] = item.signedUrl;
+    });
+  }
   return map;
 }
 
@@ -39,11 +43,19 @@ export async function fetchModulesWithEntries() {
     .order('created_at', { ascending: true });
   if (modulesError) throw modulesError;
 
-  const { data: questionRows, error: questionsError } = await supabase
-    .from('questions')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (questionsError) throw questionsError;
+  const questionRows = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('questions')
+      .select('*')
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    questionRows.push(...data);
+    if (data.length < pageSize) break;
+  }
 
   const signedUrlMap = await createSignedUrlMap(questionRows.filter((row) => row.image_path).map((row) => row.image_path));
 
