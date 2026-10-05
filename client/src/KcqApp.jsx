@@ -12,13 +12,17 @@ function isImagePath(path) {
   return imageExtensions.has(extension);
 }
 
+function getModuleLabel(name) {
+  return name.split('/').at(-1)?.trim() || name.trim();
+}
+
 function groupFolderFiles(files) {
   const groups = new Map();
   for (const file of files) {
     if (!isImagePath(file.name) && !file.type.startsWith('image/')) continue;
     const pathParts = (file.webkitRelativePath || '').split('/').filter(Boolean);
     if (pathParts.length < 3) continue;
-    const moduleName = pathParts.slice(1, -1).join(' / ').trim();
+    const moduleName = pathParts.at(-2).trim();
     if (!moduleName) continue;
     if (!groups.has(moduleName)) groups.set(moduleName, []);
     groups.get(moduleName).push({ name: file.name, load: async () => file });
@@ -32,15 +36,10 @@ async function groupZipImages(zipFile) {
   if (!entries.length) throw new Error('This ZIP does not contain any supported image files.');
 
   const paths = entries.map((entry) => entry.name.split('/').filter(Boolean));
-  const firstFolder = paths[0][0];
-  const hasCommonRoot = paths.every((parts) => parts[0] === firstFolder && parts.length > 2);
-  const archiveName = zipFile.name.replace(/\.zip$/i, '').toLowerCase();
-  const stripArchiveRoot = hasCommonRoot && firstFolder.toLowerCase() === archiveName;
-  const moduleIndex = stripArchiveRoot ? 1 : 0;
   const groups = new Map();
 
   entries.forEach((entry, index) => {
-    const moduleName = paths[index].slice(moduleIndex, -1).join(' / ').trim();
+    const moduleName = paths[index].at(-2)?.trim();
     if (!moduleName) return;
     if (!groups.has(moduleName)) groups.set(moduleName, []);
     groups.get(moduleName).push({
@@ -66,6 +65,7 @@ function MainApp() {
   const [modules, setModules] = useState([]);
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [moduleName, setModuleName] = useState('');
+  const [moduleSearch, setModuleSearch] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
@@ -83,6 +83,7 @@ function MainApp() {
   const touchStartX = useRef(null);
 
   const selectedModule = modules.find((module) => module.id === selectedModuleId) || null;
+  const filteredModules = modules.filter((module) => getModuleLabel(module.name).toLowerCase().includes(moduleSearch.trim().toLowerCase()));
   const photos = selectedModule?.entries || [];
   const filteredPhotos = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -182,7 +183,7 @@ function MainApp() {
         uploaded += 1;
       }
       await refreshModules(selectedModule.id);
-      setNotice(`${uploaded} photo${uploaded === 1 ? '' : 's'} uploaded to ${selectedModule.name}.`);
+      setNotice(`${uploaded} photo${uploaded === 1 ? '' : 's'} uploaded to ${getModuleLabel(selectedModule.name)}.`);
     } catch (uploadError) {
       await refreshModules(selectedModule.id).catch(() => {});
       setError(uploadError.message || `Uploaded ${uploaded} of ${files.length} photos. Try the rest again.`);
@@ -192,7 +193,7 @@ function MainApp() {
     }
   };
 
-  const importModuleGroups = async (groups, sourceLabel) => {
+  const importModuleGroups = async (groups) => {
     const total = [...groups.values()].reduce((sum, files) => sum + files.length, 0);
     if (!total) {
       setError('No images were found. Choose a folder containing module folders and image files.');
@@ -202,13 +203,13 @@ function MainApp() {
     setUploading(true);
     setError('');
     setNotice('');
-    setImportProgress({ done: 0, total, moduleName: sourceLabel });
+    setImportProgress({ done: 0, total, moduleName: 'Preparing import' });
     let uploaded = 0;
     let firstModuleId = '';
     try {
       const knownModules = [...modules];
       for (const [name, photosToUpload] of groups) {
-        let module = knownModules.find((item) => item.name.toLowerCase() === name.toLowerCase());
+        let module = knownModules.find((item) => getModuleLabel(item.name).toLowerCase() === name.toLowerCase());
         if (!module) {
           module = await createModule(name);
           module = { ...module, entries: [] };
@@ -217,11 +218,11 @@ function MainApp() {
         if (!firstModuleId) firstModuleId = module.id;
 
         for (const photo of photosToUpload) {
-          setImportProgress({ done: uploaded, total, moduleName: name, fileName: photo.name });
+          setImportProgress({ done: uploaded, total, moduleName: name });
           const file = await photo.load();
           await uploadModulePhoto({ moduleId: module.id, slug: module.slug, file });
           uploaded += 1;
-          setImportProgress({ done: uploaded, total, moduleName: name, fileName: photo.name });
+          setImportProgress({ done: uploaded, total, moduleName: name });
         }
       }
       await refreshModules(firstModuleId || selectedModuleId);
@@ -239,7 +240,7 @@ function MainApp() {
 
   const importFolder = async (fileList) => {
     const groups = groupFolderFiles(Array.from(fileList || []));
-    await importModuleGroups(groups, 'folder');
+    await importModuleGroups(groups);
   };
 
   const importZip = async (file) => {
@@ -250,7 +251,7 @@ function MainApp() {
     try {
       const groups = await groupZipImages(file);
       setUploading(false);
-      await importModuleGroups(groups, file.name);
+      await importModuleGroups(groups);
     } catch (importError) {
       setError(importError.message || 'Could not read this ZIP file.');
       setUploading(false);
@@ -277,7 +278,7 @@ function MainApp() {
   };
 
   const removePhoto = async (photo) => {
-    if (!window.confirm(`Remove “${photo.screenshotName}” from ${selectedModule.name}?`)) return;
+    if (!window.confirm(`Remove “${photo.screenshotName}” from ${getModuleLabel(selectedModule.name)}?`)) return;
     setError('');
     try {
       await deleteQuestionEntry(photo.id, photo.imagePath);
@@ -313,15 +314,17 @@ function MainApp() {
           <input id="module-name" value={moduleName} onChange={(event) => setModuleName(event.target.value)} placeholder="Name a module" maxLength={80} />
           <button type="submit" className="add-module-button" disabled={!moduleName.trim()} aria-label="Create module" title="Create module"><Plus size={18} /></button>
         </form>
+        <label className="search-box module-search"><Search size={16} /><span className="sr-only">Search modules</span><input aria-label="Search modules" value={moduleSearch} onChange={(event) => setModuleSearch(event.target.value)} placeholder="Find a module" /></label>
 
         <nav className="module-nav" aria-label="Modules">
-          {modules.map((module) => (
+          {filteredModules.map((module) => (
             <button key={module.id} type="button" className={`module-link${module.id === selectedModuleId ? ' is-active' : ''}`} onClick={() => { setSelectedModuleId(module.id); setSearch(''); setNotice(''); setError(''); }}>
               <span className="module-dot" />
-              <span className="module-link-name">{module.name}</span>
+              <span className="module-link-name">{getModuleLabel(module.name)}</span>
               <span className="module-photo-count">{module.entries.length}</span>
             </button>
           ))}
+          {!loading && modules.length > 0 && filteredModules.length === 0 && <p className="sidebar-empty">No modules match that search.</p>}
           {!loading && modules.length === 0 && <p className="sidebar-empty">Your first module starts here.</p>}
         </nav>
 
@@ -333,7 +336,7 @@ function MainApp() {
 
       <main className="main-area">
         <header className="topbar">
-          <div className="breadcrumb"><span>LIBRARY</span><span className="breadcrumb-slash">/</span><span>{selectedModule?.name || 'OVERVIEW'}</span></div>
+          <div className="breadcrumb"><span>LIBRARY</span><span className="breadcrumb-slash">/</span><span>{selectedModule ? getModuleLabel(selectedModule.name) : 'OVERVIEW'}</span></div>
           <div className="topbar-actions">
             {installPrompt && <button type="button" className="install-button" onClick={installApp}><ArrowDownToLine size={16} />Install app</button>}
             <span className="secure-chip"><Cloud size={15} />{connected ? 'Shared cloud library' : 'Cloud setup needed'}</span>
@@ -344,7 +347,7 @@ function MainApp() {
           <section className="welcome-row">
             <div>
               <p className="eyebrow">A LITTLE MORE ORGANIZED</p>
-              <h1>{selectedModule?.name || 'Your image library'}</h1>
+              <h1>{selectedModule ? getModuleLabel(selectedModule.name) : 'Your image library'}</h1>
               <p className="welcome-copy">{selectedModule ? `${photos.length} ${photos.length === 1 ? 'photo' : 'photos'} in this module` : 'Keep every screenshot in its place.'}</p>
             </div>
             <div className="welcome-actions">
@@ -363,7 +366,7 @@ function MainApp() {
           {(error || notice) && <div className={`feedback ${error ? 'feedback-error' : 'feedback-success'}`} role={error ? 'alert' : 'status'}>{error || notice}<button type="button" onClick={() => { setError(''); setNotice(''); }} aria-label="Dismiss message"><X size={16} /></button></div>}
 
           {importProgress && <div className="import-progress" role="status" aria-live="polite">
-            <div className="import-progress-copy"><span>{importProgress.done} of {importProgress.total} photos</span><span>{importProgress.moduleName}{importProgress.fileName ? ` / ${importProgress.fileName}` : ''}</span></div>
+            <div className="import-progress-copy"><span>{importProgress.done} of {importProgress.total} photos</span><span>{importProgress.moduleName}</span></div>
             <div className="import-progress-track"><span style={{ width: `${(importProgress.done / importProgress.total) * 100}%` }} /></div>
           </div>}
 
@@ -416,7 +419,7 @@ function MainApp() {
       {activePhoto && <div className="photo-viewer" role="presentation" onClick={() => setViewerPhotoId('')}>
         <section className="viewer-dialog" role="dialog" aria-modal="true" aria-label={`Photo ${activePhotoIndex + 1} of ${filteredPhotos.length}`} onClick={(event) => event.stopPropagation()}>
           <header className="viewer-header">
-            <div className="viewer-title"><strong>{activePhoto.screenshotName || 'Photo'}</strong><span>{selectedModule?.name} · {activePhotoIndex + 1} / {filteredPhotos.length}</span></div>
+            <div className="viewer-title"><strong>{activePhoto.screenshotName || 'Photo'}</strong><span>{selectedModule ? getModuleLabel(selectedModule.name) : ''} · {activePhotoIndex + 1} / {filteredPhotos.length}</span></div>
               <button type="button" className="viewer-close" onClick={() => setViewerPhotoId('')} aria-label="Close photo viewer" autoFocus><X size={21} /></button>
           </header>
           <div className="viewer-stage" onTouchStart={(event) => { touchStartX.current = event.touches[0].clientX; }} onTouchEnd={(event) => {
@@ -426,7 +429,7 @@ function MainApp() {
             touchStartX.current = null;
           }}>
             {filteredPhotos.length > 1 && <button type="button" className="viewer-nav viewer-previous" onClick={() => moveViewer(-1)} aria-label="Previous photo"><ChevronLeft size={26} /></button>}
-            <img className="viewer-image" src={activePhoto.screenshot} alt={activePhoto.screenshotName || `Photo in ${selectedModule?.name}`} />
+            <img className="viewer-image" src={activePhoto.screenshot} alt={activePhoto.screenshotName || `Photo in ${selectedModule ? getModuleLabel(selectedModule.name) : 'your library'}`} />
             {filteredPhotos.length > 1 && <button type="button" className="viewer-nav viewer-next" onClick={() => moveViewer(1)} aria-label="Next photo"><ChevronRight size={26} /></button>}
           </div>
           <footer className="viewer-footer"><span>Use ← → to browse, Esc to close</span><span>{activePhoto.createdAt ? new Date(activePhoto.createdAt).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : ''}</span></footer>

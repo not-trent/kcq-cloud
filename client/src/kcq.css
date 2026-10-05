@@ -37,6 +37,7 @@ button:disabled { cursor: wait; opacity: .65; }
 .module-form input { width: min(100%, 180px); min-width: 0; height: 40px; padding: 0 12px; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 12px; }
 .module-form input::placeholder { color: #9aa6a3; }
 .add-module-button { display: grid; place-items: center; flex: 0 0 40px; border: 0; border-radius: 10px; color: #42551f; background: var(--green); }
+.module-search.search-box { width: auto; height: 36px; margin: 11px 2px 0; background: #fff; }
 .module-nav { display: grid; align-content: start; gap: 4px; overflow: auto; margin: 20px -4px 0; padding: 0 4px; }
 .module-link { min-height: 43px; display: flex; align-items: center; gap: 11px; padding: 0 11px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: #586563; text-align: left; }
 .module-link:hover { background: #f0f5f2; }
