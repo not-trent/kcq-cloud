@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import { Archive, ArrowDownToLine, ChevronLeft, ChevronRight, Cloud, Expand, FolderOpen, ImagePlus, Images, LoaderCircle, Plus, Search, Trash2, Upload, X } from 'lucide-react';
+import { Archive, ArrowDownToLine, ChevronLeft, ChevronRight, Cloud, Expand, FolderOpen, ImagePlus, Images, LoaderCircle, Moon, Palette, Plus, Search, Sun, Trash2, Upload, X } from 'lucide-react';
 import { createModule, deleteQuestionEntry, fetchModulesWithEntries, uploadModulePhoto } from './lib/supabaseData';
 import { supabaseConfigError } from './lib/supabaseClient';
 import './kcq.css';
 
 const imageExtensions = new Set(['.avif', '.bmp', '.gif', '.heic', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp']);
+const accentPalettes = [
+  { id: 'sage', name: 'Sage', color: '#b7d866' },
+  { id: 'teal', name: 'Teal', color: '#57c4b0' },
+  { id: 'coral', name: 'Coral', color: '#f28b78' },
+  { id: 'blue', name: 'Blue', color: '#729ce0' },
+  { id: 'gold', name: 'Gold', color: '#e6b84f' },
+];
 
 function isImagePath(path) {
   const extension = path.match(/\.[^.\/]+$/)?.[0].toLowerCase();
@@ -62,6 +69,8 @@ function imageMimeType(filename) {
 }
 
 function MainApp() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('kcq-theme') === 'dark' ? 'dark' : 'light');
+  const [accent, setAccent] = useState(() => accentPalettes.some((palette) => palette.id === localStorage.getItem('kcq-accent')) ? localStorage.getItem('kcq-accent') : 'sage');
   const [modules, setModules] = useState([]);
   const [selectedModuleId, setSelectedModuleId] = useState('');
   const [moduleName, setModuleName] = useState('');
@@ -92,6 +101,16 @@ function MainApp() {
   }, [photos, search]);
   const activePhotoIndex = filteredPhotos.findIndex((photo) => photo.id === viewerPhotoId);
   const activePhoto = activePhotoIndex >= 0 ? filteredPhotos[activePhotoIndex] : null;
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('kcq-theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.accent = accent;
+    localStorage.setItem('kcq-accent', accent);
+  }, [accent]);
 
   const refreshModules = async (selectId = selectedModuleId) => {
     const data = await fetchModulesWithEntries();
@@ -338,6 +357,22 @@ function MainApp() {
         <header className="topbar">
           <div className="breadcrumb"><span>LIBRARY</span><span className="breadcrumb-slash">/</span><span>{selectedModule ? getModuleLabel(selectedModule.name) : 'OVERVIEW'}</span></div>
           <div className="topbar-actions">
+            <button type="button" className="theme-toggle" onClick={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+              <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
+            </button>
+            <details className="palette-menu">
+              <summary className="palette-trigger" aria-label="Choose accent color" title="Choose accent color"><Palette size={16} /><span>Palette</span></summary>
+              <div className="palette-options" role="group" aria-label="Accent color palette">
+                {accentPalettes.map((palette) => <button key={palette.id} type="button" className="palette-option" aria-label={`${palette.name} palette`} aria-pressed={accent === palette.id} onClick={(event) => {
+                  setAccent(palette.id);
+                  event.currentTarget.closest('details')?.removeAttribute('open');
+                }}>
+                  <span className="palette-swatch" style={{ '--swatch-color': palette.color }} />
+                  <span>{palette.name}</span>
+                </button>)}
+              </div>
+            </details>
             {installPrompt && <button type="button" className="install-button" onClick={installApp}><ArrowDownToLine size={16} />Install app</button>}
             <span className="secure-chip"><Cloud size={15} />{connected ? 'Shared cloud library' : 'Cloud setup needed'}</span>
           </div>
