@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.env.local
+client/.env
+server/.env
+server/uploads
+server/data/modules
+money-tracker/
+money-tracker.rar
+*.traineddata
+.vercel
+.vscode/
+fix-duplicate.ps1
+progress.json

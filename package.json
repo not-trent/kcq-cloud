@@ -1,0 +1,13 @@
+{
+  "name": "kcq-cloud",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace client",
+    "build": "npm run build --workspace client",
+    "supabase:check": "npm run check:supabase --workspace server"
+  }
+}

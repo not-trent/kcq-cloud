@@ -1,0 +1,19 @@
+{
+  "name": "KCQ Cloud",
+  "short_name": "KCQ Cloud",
+  "description": "A simple, shared cloud library for KCQ photos, organized by module.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f6",
+  "theme_color": "#f4f7f6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
