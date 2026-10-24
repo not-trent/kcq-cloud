@@ -27,7 +27,7 @@ The repository also contains a Node/Express server and maintenance scripts. The 
 
 No Supabase account, new project, or individual login is needed. Everyone uses the same live app and shared question library.
 
-- **Open the app:** [kcq-cloud.vercel.app](https://kcq-cloud.vercel.app)
+
 - **Download the extension:** [Download the latest GitHub source ZIP](https://github.com/not-trent/kcq-cloud/archive/refs/heads/main.zip), then extract it.
 
 To install the extension in Chrome or another Chromium browser:
