@@ -1,6 +1,14 @@
 // Runs on Moodle quiz review pages: reads each multiple-choice question and sends it to KCQ Cloud.
 const textOf = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
 
+// Diagrams are ignored; only the visible stem text around them is saved and matched.
+function questionText(el) {
+  if (!el) return '';
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll('img, object, svg, canvas, video').forEach((node) => node.replaceWith(' '));
+  return textOf(clone);
+}
+
 function parseOption(el) {
   const input = el.querySelector('input[type=radio], input[type=checkbox]');
   const label = (el.querySelector('label') || el).cloneNode(true);
@@ -23,7 +31,7 @@ function parseScore(que) {
 
 function parseQuestions() {
   return [...document.querySelectorAll('.que.multichoice')].map((que) => {
-    const question = textOf(que.querySelector('.qtext'));
+    const question = questionText(que.querySelector('.qtext'));
     const options = [...que.querySelectorAll('.answer > div')].map(parseOption).filter((o) => o.text);
     if (!question || !options.length) return null;
     return {
@@ -121,9 +129,12 @@ function addLookupBubble() {
       card.append(el('small', '', row.moduleName), el('p', 'q', row.question));
       card.append(row.answer
         ? el('p', 'a', `Answer: ${row.answer}`)
-        : el('p', 'u', `Answer not confirmed${row.wrong.length ? ` - not: ${row.wrong.join(' / ')}` : ''}`));
+        : el('p', 'u', `Answer not confirmed${row.wrong.length ? ` — wrong: ${row.wrong.join(' / ')}` : ''}`));
       const guess = KCQ.suggest(row);
-      if (guess) card.append(el('p', 'g', `Try this: ${guess.option} (best guess, ${guess.remaining} option${guess.remaining === 1 ? '' : 's'} left - not confirmed)`));
+      if (guess) {
+        const how = guess.remaining === 1 ? 'only option left after eliminating wrong picks' : `most likely of ${guess.remaining} left after eliminating wrong picks`;
+        card.append(el('p', 'g', `Likely answer: ${guess.option} (${how})`));
+      }
       resultsEl.append(card);
     });
   };

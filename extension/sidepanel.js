@@ -18,9 +18,12 @@ function render() {
     const card = el('div', 'card');
     card.append(el('small', '', row.moduleName), el('p', 'q', row.question));
     if (row.answer) card.append(el('p', 'a', `Answer: ${row.answer}`));
-    else card.append(el('p', 'u', `Answer not confirmed${row.wrong.length ? ` - not: ${row.wrong.join(' / ')}` : ''}`));
+    else card.append(el('p', 'u', `Answer not confirmed${row.wrong.length ? ` — wrong: ${row.wrong.join(' / ')}` : ''}`));
     const guess = KCQ.suggest(row);
-    if (!row.answer && guess) card.append(el('p', 'g', `Try this: ${guess.option} (best guess, ${guess.remaining} option${guess.remaining === 1 ? '' : 's'} left - not confirmed)`));
+    if (!row.answer && guess) {
+      const how = guess.remaining === 1 ? 'only option left after eliminating wrong picks' : `most likely of ${guess.remaining} left after eliminating wrong picks`;
+      card.append(el('p', 'g', `Likely answer: ${guess.option} (${how})`));
+    }
     resultsEl.append(card);
   });
 }

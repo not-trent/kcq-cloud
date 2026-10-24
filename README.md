@@ -41,9 +41,9 @@ Supabase URL: https://ewcworrjwtjtmkekddbq.supabase.co
 Supabase anon/public key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3Y3dvcnJqd3RqdG1rZWtkZGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjA4NjcsImV4cCI6MjEwNTgzNjg2N30.pouenhxDfoL4vDCzJGJ2wUKstIMcDeFym1fNk4xDysg
 ```
 
-On a Moodle quiz review page, select **Save to KCQ Cloud** and confirm the module name. Search saved questions in the extension side panel or in-page lookup. On a quiz attempt page, the helper checks for a confirmed shared answer before requesting an optional AI suggestion.
+On a Moodle quiz review page, select **Save to KCQ Cloud** and confirm the module name. Search saved questions in the extension side panel or in-page lookup. On a quiz attempt page, the helper checks for a confirmed shared answer before requesting an optional AI suggestion. Questions that include a diagram are matched from the surrounding extracted text; the image itself is ignored.
 
-AI suggestions are optional. Configure an HTTPS OpenAI-compatible chat-completions endpoint, model, and API key in extension Options. You can also add a study guide by pasting text or loading a `.txt`/`.md` guide file. The extension stores these settings and guides in Chrome local storage. A saved cloud answer takes priority over an AI request; uncertain suggestions are marked for checking.
+AI suggestions are optional. Configure an HTTPS OpenAI-compatible chat-completions endpoint, model, and API key in extension Options. You can also add a study guide by pasting text or loading a `.txt`/`.md` guide file. The extension stores these settings and guides in Chrome local storage. A saved cloud answer takes priority over an AI request. If the answer is not confirmed yet, known-wrong picks from earlier attempts are eliminated and the remaining or most likely option is shown. Uncertain suggestions are marked for checking. Image-only stems with no usable text still need checking.
 
 **Shared-data warning:** The Supabase anon key is designed to be used in client applications, but the current database and storage policies allow anonymous read/write access. Anyone can view, add, change, or delete shared library data. Do not upload private or sensitive content. Never use or publish a Supabase service-role key.
 

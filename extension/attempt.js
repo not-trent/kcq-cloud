@@ -2,6 +2,14 @@
 (() => {
   const textOf = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim();
 
+  // Diagrams are ignored; matching and suggestions use only the stem text around them.
+  function questionText(el) {
+    if (!el) return '';
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('img, object, svg, canvas, video').forEach((node) => node.replaceWith(' '));
+    return textOf(clone);
+  }
+
   function parseAttemptQuestions(root = document) {
     return [...root.querySelectorAll('.que.multichoice')]
       .filter((que) => !/\b(correct|incorrect|partiallycorrect)\b/.test(que.className))
@@ -22,7 +30,7 @@
         return {
           number: textOf(que.querySelector('.qno')) || String(index + 1),
           el: que,
-          text: textOf(qtext),
+          text: questionText(qtext),
           options,
           hasImage: Boolean(qtext?.querySelector('img')) || rawOptions.some((option) => option.hasImage),
         };
@@ -80,7 +88,12 @@
       } else {
         value.className = 'letter';
         value.textContent = entry.letter;
-        detail.textContent = ` ${entry.optionText.slice(0, 60)}${entry.confidence === 'medium' ? ' (likely)' : ''}${entry.source === 'saved' ? ' (KCQ Cloud)' : ''}`;
+        const eliminated = (entry.eliminated || []).map((option) => option.letter).join(', ');
+        const via = entry.source === 'saved' ? ' (KCQ Cloud)'
+          : entry.source === 'elimination' ? ' (only one left)'
+            : entry.source === 'guess' || entry.confidence === 'medium' ? ' (likely)' : '';
+        const not = eliminated ? `; not ${eliminated}` : '';
+        detail.textContent = ` ${entry.optionText.slice(0, 60)}${via}${not}`;
       }
       line.append(label, value, detail);
       if (entry.needsChecking && bySignature.has(number)) {
@@ -111,7 +124,14 @@
         state[question.number] = { sig, needsChecking: true, reason: response?.reason || chrome.runtime.lastError?.message || 'No response.' };
       } else {
         const option = question.options.find((o) => o.letter === response.letter);
-        state[question.number] = { sig, letter: response.letter, optionText: option?.text || '', confidence: response.confidence, source: response.source };
+        state[question.number] = {
+          sig,
+          letter: response.letter,
+          optionText: option?.text || '',
+          confidence: response.confidence,
+          source: response.source,
+          eliminated: response.eliminated || [],
+        };
       }
       save();
       render();

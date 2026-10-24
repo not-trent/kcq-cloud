@@ -1,9 +1,21 @@
 // Shared Supabase REST helpers; loaded by the background worker and the side panel.
 const KCQ = (() => {
+  const DEFAULTS = {
+    supabaseUrl: 'https://ewcworrjwtjtmkekddbq.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3Y3dvcnJqd3RqdG1rZWtkZGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjA4NjcsImV4cCI6MjEwNTgzNjg2N30.pouenhxDfoL4vDCzJGJ2wUKstIMcDeFym1fNk4xDysg',
+  };
   const norm = (text = '') => String(text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
+  async function credentials() {
+    const stored = await chrome.storage.local.get(['supabaseUrl', 'anonKey']);
+    return {
+      supabaseUrl: stored.supabaseUrl || DEFAULTS.supabaseUrl,
+      anonKey: stored.anonKey || DEFAULTS.anonKey,
+    };
+  }
+
   async function api(path, { method = 'GET', body, headers = {} } = {}) {
-    const { supabaseUrl, anonKey } = await chrome.storage.local.get(['supabaseUrl', 'anonKey']);
+    const { supabaseUrl, anonKey } = await credentials();
     if (!supabaseUrl || !anonKey) throw new Error('Open the extension options and enter your Supabase URL and anon key.');
     const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/${path}`, {
       method,
@@ -132,8 +144,15 @@ const KCQ = (() => {
     const remaining = row.options.filter((option) => !wrongKeys.has(norm(option)));
     if (!remaining.length) return null;
 
-    const isCombo = row.options.every((option) => /^[a-z](\s*,\s*[a-z])*$/i.test(option.trim()));
-    const letters = (option) => new Set(option.toLowerCase().match(/\b[a-z]\b/g) || []);
+    const comboSet = (option) => {
+      const raw = String(option).toLowerCase();
+      const roman = raw.match(/\b(viii|vii|iii|ii|iv|ix|vi|i|v|x)\b/g);
+      if (roman?.length && /only|,|\band\b/.test(raw)) return new Set(roman);
+      if (/^[a-z](\s*,\s*[a-z])*$/i.test(raw.trim())) return new Set(raw.match(/\b[a-z]\b/g) || []);
+      return null;
+    };
+    const isCombo = row.options.every((option) => comboSet(option));
+    const letters = (option) => comboSet(option) || new Set();
     const questionTokens = new Set(norm(row.question).split(' '));
 
     // Combination options: distractors are usually built around the true answer, so the most-shared one wins.
@@ -151,5 +170,5 @@ const KCQ = (() => {
     return { option: best.option, remaining: remaining.length };
   }
 
-  return { saveQuestions, loadAll, search, suggest };
+  return { saveQuestions, loadAll, search, suggest, DEFAULTS, credentials };
 })();

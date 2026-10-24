@@ -3,8 +3,8 @@ const key = document.getElementById('key');
 const status = document.getElementById('status');
 
 chrome.storage.local.get(['supabaseUrl', 'anonKey']).then((stored) => {
-  url.value = stored.supabaseUrl || '';
-  key.value = stored.anonKey || '';
+  url.value = stored.supabaseUrl || KCQ.DEFAULTS.supabaseUrl;
+  key.value = stored.anonKey || KCQ.DEFAULTS.anonKey;
 });
 
 document.getElementById('save').addEventListener('click', async () => {

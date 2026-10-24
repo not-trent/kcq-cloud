@@ -120,7 +120,7 @@ await test('loadAll hides old image/OCR rows and search ranks answered first', a
 // ---------- content.js on a Moodle-like review page ----------
 const html = `<body><h1>Introduction to Business Management Jul26 Y1 S1</h1>
 <div class="que multichoice"><div class="info"><div class="state">Correct</div><div class="grade">Mark 1.00 out of 1.00</div></div>
-<div class="content"><div class="qtext"><p>A company is struggling. Why?</p><p>a. It neglects.</p></div>
+<div class="content"><div class="qtext"><p>A company is struggling. Why?</p><p><img src="org-chart.png" alt="organisation chart"></p><p>a. It neglects.</p></div>
 <div class="answer">
 <div class="r0"><input type="radio" checked><div class="d-flex"><span class="answernumber">A. </span><div class="flex-fill">a, c, e</div></div></div>
 <div class="r1"><input type="radio"><div class="d-flex"><span class="answernumber">B. </span><div class="flex-fill">c, d, e</div></div></div>
@@ -148,6 +148,8 @@ await test('content script parses questions, picks and scores, and sends them', 
   assert.equal(moduleName, 'Introduction to Business Management Jul26 Y1 S1');
   assert.equal(items.length, 2);
   assert.deepEqual(items[0].options, ['a, c, e', 'c, d, e', 'c, b, d', 'a, b, c']);
+  assert.match(items[0].question, /A company is struggling\. Why\?\s*a\. It neglects/);
+  assert.doesNotMatch(items[0].question, /organisation chart/);
   assert.deepEqual([items[0].picked, items[0].score], [['a, c, e'], 'correct']);
   assert.deepEqual([items[1].options, items[1].picked, items[1].score], [['Yes', 'No'], ['No'], 'wrong']);
   assert.ok(hosts.length >= 1);

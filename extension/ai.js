@@ -81,6 +81,52 @@ const KCQAI = (() => {
     return { letter: match[1], confidence: match[2].toLowerCase() };
   }
 
+  function comboSet(text) {
+    const raw = String(text).toLowerCase();
+    const roman = raw.match(/\b(viii|vii|iii|ii|iv|ix|vi|i|v|x)\b/g);
+    if (roman?.length && /only|,|\band\b/.test(raw)) return new Set(roman);
+    if (/^[a-z](\s*,\s*[a-z])*$/i.test(raw.trim())) return new Set(raw.match(/\b[a-z]\b/g) || []);
+    return null;
+  }
+
+  function bestRemaining(questionText, options, remaining) {
+    const texts = options.map((option) => option.text);
+    const combo = texts.length > 0 && texts.every((text) => comboSet(text));
+    const questionTokens = new Set(tokens(questionText));
+    const scoreOf = (option) => {
+      if (combo) {
+        const mine = comboSet(option.text);
+        return texts.filter((other) => norm(other) !== norm(option.text))
+          .reduce((sum, other) => sum + [...comboSet(other)].filter((part) => mine.has(part)).length, 0);
+      }
+      const words = tokens(option.text);
+      return words.length ? words.filter((word) => questionTokens.has(word)).length / words.length : 0;
+    };
+    return remaining.slice().sort((a, b) => scoreOf(b) - scoreOf(a))[0];
+  }
+
+  // Confirmed answers win. Otherwise drop known-wrong options and pick the remaining / most likely one.
+  function fromKnown(question, row) {
+    if (!row) return null;
+    const { text, options } = question;
+    const wrongKeys = new Set((row.wrong || []).map(norm));
+    const eliminated = options.filter((option) => option.text && wrongKeys.has(norm(option.text)));
+    const withEliminated = (result) => (eliminated.length ? { ...result, eliminated } : result);
+
+    if (row.answer) {
+      const savedOption = options.find((option) => norm(option.text) === norm(row.answer));
+      if (savedOption) return withEliminated({ letter: savedOption.letter, confidence: 'high', source: 'saved' });
+    }
+
+    const remaining = options.filter((option) => option.text && !wrongKeys.has(norm(option.text)));
+    if (!eliminated.length || remaining.length < 1) return null;
+    if (remaining.length === 1) {
+      return withEliminated({ letter: remaining[0].letter, confidence: 'high', source: 'elimination' });
+    }
+    const best = bestRemaining(text, options, remaining);
+    return best ? withEliminated({ letter: best.letter, confidence: 'medium', source: 'guess' }) : null;
+  }
+
   async function sha256(text) {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -93,14 +139,12 @@ const KCQAI = (() => {
     async function resolve({ moduleName, question, force }) {
       const { text, options } = question;
       if (!text || options.length < 2) return { needsChecking: true, reason: 'Incomplete question.' };
-      if (question.hasImage) return { needsChecking: true, reason: 'Question has an image or diagram.' };
       const letters = options.map((option) => option.letter);
 
-      // A confirmed answer from earlier marked attempts costs no credits.
+      // Images/diagrams are ignored. The extracted stem text is used for saved matches and optional AI.
       const bank = (await deps.getBank?.()) || [];
-      const saved = bank.find((row) => row.answer && sameQuestion(row.question, text));
-      const savedOption = saved && options.find((option) => norm(option.text) === norm(saved.answer));
-      if (savedOption) return { letter: savedOption.letter, confidence: 'high', source: 'saved' };
+      const known = fromKnown(question, bank.find((row) => sameQuestion(row.question, text)));
+      if (known) return known;
 
       const excerpts = topChunks(guideFor(await deps.getGuides(), moduleName), `${text} ${options.map((o) => o.text).join(' ')}`);
       const prompt = buildPrompt(question, excerpts);
@@ -133,5 +177,5 @@ const KCQAI = (() => {
     return { answer };
   }
 
-  return { createAnswerer, chunkGuide, topChunks, guideFor, buildPrompt, parseReply, sameQuestion };
+  return { createAnswerer, chunkGuide, topChunks, guideFor, buildPrompt, parseReply, sameQuestion, fromKnown };
 })();

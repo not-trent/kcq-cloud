@@ -32,7 +32,12 @@ const abc = que({
   options: [['A. ', 'a and b'], ['B. ', 'b and c'], ['C. ', 'a and c'], ['D. ', 'all of them']],
 });
 const marked = que({ no: 3, classes: 'correct', body: 'Already marked', options: [['A. ', 'x'], ['B. ', 'y']] });
-const diagram = que({ no: 4, body: 'See the chart', image: '<img src="x.png">', options: [['A. ', 'up'], ['B. ', 'down']] });
+const diagram = que({
+  no: 4,
+  body: '<p>The production trend is shown below.</p>',
+  image: '<p><img src="x.png" alt="quarterly output chart"></p><p>Which direction does output move?</p>',
+  options: [['A. ', 'up'], ['B. ', 'down']],
+});
 const page = (inner) => `<html><body><h1>End User Computing Jul26</h1><div id="mod_quiz_navblock"></div>${inner}</body></html>`;
 
 // ---------- extraction + letter mapping ----------
@@ -63,6 +68,8 @@ await test('extracts number, full text with statements, options, and skips marke
     { letter: 'C', text: 'ii and iv only' }, { letter: 'D', text: 'i, ii and iv only' },
   ]);
   assert.equal(questions[2].hasImage, true);
+  assert.match(questions[2].text, /The production trend is shown below.*Which direction does output move/);
+  assert.doesNotMatch(questions[2].text, /quarterly output chart/);
 });
 
 await test('answer letters come from option labels, never from statement labels a/b/c or i/ii', async () => {
@@ -130,17 +137,56 @@ await test('duplicate requests: concurrent and repeated calls reach the model on
   assert.equal(again.source, 'cache');
 });
 
-await test('no model call for diagrams, incomplete questions, or answers already saved', async () => {
+await test('incomplete questions and saved answers skip the model; diagrams use extracted text', async () => {
   let modelCalls = 0;
   const counting = async () => { modelCalls += 1; return 'A|high'; };
+  const diagramQuestion = {
+    text: 'The production trend is shown below. Which direction does output move?',
+    hasImage: true,
+    options: [{ letter: 'A', text: 'up' }, { letter: 'B', text: 'down' }],
+  };
+
+  const { answerer: withSavedDiagram } = makeAnswerer({
+    callModel: counting,
+    getBank: async () => [{ question: diagramQuestion.text, answer: 'up' }],
+  });
+  const fromBank = await withSavedDiagram.answer({ moduleName: 'x', question: diagramQuestion });
+  assert.equal(`${fromBank.letter}|${fromBank.source}`, 'A|saved');
+
   const { answerer } = makeAnswerer({
     callModel: counting,
     getBank: async () => [{ question: question.text, answer: 'ii and iv only' }],
   });
-  assert.equal((await answerer.answer({ moduleName: 'x', question: { ...question, hasImage: true } })).needsChecking, true);
   assert.equal((await answerer.answer({ moduleName: 'x', question: { text: 'Hi', options: [question.options[0]] } })).needsChecking, true);
   const saved = await answerer.answer({ moduleName: 'x', question });
   assert.equal(`${saved.letter}|${saved.source}`, 'C|saved');
+  const unsavedDiagram = await answerer.answer({ moduleName: 'x', question: diagramQuestion });
+  assert.equal(`${unsavedDiagram.letter}|${unsavedDiagram.source}`, 'A|ai');
+  assert.equal(modelCalls, 1);
+});
+
+await test('known wrong picks eliminate to one answer or the most likely remaining option', async () => {
+  let modelCalls = 0;
+  const counting = async () => { modelCalls += 1; return 'A|high'; };
+  const { answerer: oneLeft } = makeAnswerer({
+    callModel: counting,
+    getBank: async () => [{
+      question: question.text,
+      answer: '',
+      wrong: ['iii and v only', 'i and iii only', 'ii and iv only'],
+    }],
+  });
+  const last = await oneLeft.answer({ moduleName: 'x', question });
+  assert.equal(`${last.letter}|${last.source}|${last.confidence}`, 'D|elimination|high');
+  assert.deepEqual(last.eliminated.map((option) => option.letter), ['A', 'B', 'C']);
+
+  const { answerer: likely } = makeAnswerer({
+    callModel: counting,
+    getBank: async () => [{ question: question.text, answer: '', wrong: ['iii and v only'] }],
+  });
+  const guess = await likely.answer({ moduleName: 'x', question });
+  assert.equal(`${guess.letter}|${guess.source}|${guess.confidence}`, 'D|guess|medium');
+  assert.deepEqual(guess.eliminated.map((option) => option.letter), ['A']);
   assert.equal(modelCalls, 0);
 });
 
@@ -186,6 +232,23 @@ await test('panel lists Question N: LETTER per question, updates on navigation, 
   assert.equal(secondLines.length, 3);
   assert.match(secondLines[0], /^Question 1: D/);
   assert.match(secondLines[2], /^Question 5: A.*\(likely\)/);
+});
+
+await test('panel shows a likely answer and which options were already wrong', async () => {
+  const { w, observers } = load(page(forensic), {
+    reply: () => ({
+      letter: 'D',
+      confidence: 'medium',
+      source: 'guess',
+      eliminated: [{ letter: 'A', text: 'iii and v only' }, { letter: 'B', text: 'i and iii only' }],
+    }),
+  });
+  await tick();
+  intersect(observers[0], w.document.querySelector('.que'));
+  await tick();
+  assert.match(panelText(w)[0], /^Question 1: D/);
+  assert.match(panelText(w)[0], /likely/);
+  assert.match(panelText(w)[0], /not A, B/);
 });
 
 await test('insufficient evidence shows Needs checking', async () => {
