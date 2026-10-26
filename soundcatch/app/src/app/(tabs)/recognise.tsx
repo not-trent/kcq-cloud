@@ -3,18 +3,22 @@ import { Image } from 'expo-image';
 import { useAudioPlayer } from 'expo-audio';
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import * as FileSystem from 'expo-file-system/legacy';
+import { Directory, File } from 'expo-file-system';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { GlassButton } from '@/components/glass/GlassButton';
 import { GlassCard } from '@/components/glass/GlassCard';
 import { useDockSpace } from '@/components/GlassDock';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { api, type RecogniseResult, type Track, type UnifiedTrack } from '@/lib/api';
-import { downloadTrack } from '@/lib/downloads';
-import { library } from '@/store/library';
-import { colors, radius, spacing, type as typeTokens } from '@/theme/tokens';
+import { downloadTrack, downloadsDirectory } from '@/lib/downloads';
+import { base64ToUint8, createZip, uint8ToBase64 } from '@/lib/zip';
+import { rankDownloadCandidates, type RankedCandidate } from '@/lib/downloadMatching';
+import { library, trackKey, useLibrary } from '@/store/library';
+import { colors, gradients, radius, spacing, type as typeTokens } from '@/theme/tokens';
 
 const LISTEN_SECONDS = 10;
 
@@ -38,6 +42,7 @@ function toTrack(sc: UnifiedTrack): Track | null {
     id: sc.id,
     title: sc.title,
     artist: sc.artist,
+    album: sc.album,
     durationMs: sc.durationMs ?? 0,
     artworkUrl: sc.coverUrl,
     permalinkUrl: sc.sourceUrl ?? '',
@@ -50,6 +55,23 @@ function toTrack(sc: UnifiedTrack): Track | null {
     attribution: sc.attribution ?? { providerName: 'SoundCloud' },
     conversion: { available: false, message: 'MP3 conversion is decided by the server.' },
   };
+}
+
+function classificationLabel(value?: UnifiedTrack['classification']): string {
+  switch (value) {
+    case 'authorised_download':
+      return 'Authorised Download';
+    case 'purchase_required':
+      return 'Purchase Required';
+    case 'streaming_only':
+      return 'Streaming Only';
+    case 'download_rights_unverified':
+      return 'Download Rights Unverified';
+    case 'download_prohibited':
+      return 'Download Prohibited';
+    default:
+      return 'Unclassified';
+  }
 }
 
 function saveMatch(res: RecogniseResult): void {
@@ -87,6 +109,18 @@ export default function RecogniseScreen() {
   const [result, setResult] = useState<RecogniseResult | null>(null);
   const [playing, setPlaying] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
+  // Download panels
+  const [songPanelOpen, setSongPanelOpen] = useState(false);
+  const [albumPanelOpen, setAlbumPanelOpen] = useState(false);
+  const [candidates, setCandidates] = useState<RankedCandidate[]>([]);
+  const [candidatePhase, setCandidatePhase] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [candidateError, setCandidateError] = useState<string | null>(null);
+  const [selectedTracks, setSelectedTracks] = useState<Record<string, boolean>>({});
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const [zipping, setZipping] = useState(false);
+
+  const { downloads } = useLibrary();
 
   const pulse = useRef(new Animated.Value(0)).current;
   const sentRef = useRef(false);
@@ -187,6 +221,12 @@ export default function RecogniseScreen() {
     sentRef.current = false;
     setPhase('idle');
     setPlaying(false);
+    setSongPanelOpen(false);
+    setAlbumPanelOpen(false);
+    setCandidates([]);
+    setCandidatePhase('idle');
+    setCandidateError(null);
+    setSelectedTracks({});
     // Release any prepared recorder session.
     try { void recorder.stop(); } catch { /* ignore */ }
     void setAudioModeAsync({ allowsRecording: false });
@@ -211,6 +251,199 @@ export default function RecogniseScreen() {
     setDownloading(true);
     try { await downloadTrack(track, 'original'); }
     finally { setDownloading(false); }
+  };
+
+  const loadCandidates = useCallback(async () => {
+    if (!result) return;
+    setCandidatePhase('loading');
+    setCandidateError(null);
+    try {
+      const page = await api.search(`${result.title} ${result.artist}`);
+      const ranked = rankDownloadCandidates(page.items, result);
+      setCandidates(ranked);
+      const selection: Record<string, boolean> = {};
+      ranked.forEach((item) => {
+        const track = toTrack(item.track);
+        if (track && item.track.downloadable) selection[trackKey(track)] = true;
+      });
+      setSelectedTracks(selection);
+      setCandidatePhase('done');
+    } catch (cause) {
+      setCandidateError(cause instanceof Error ? cause.message : 'Search failed.');
+      setCandidatePhase('error');
+    }
+  }, [result]);
+
+  const openSongPanel = () => {
+    setAlbumPanelOpen(false);
+    setSongPanelOpen(true);
+    if (candidates.length === 0 && candidatePhase !== 'loading') void loadCandidates();
+  };
+
+  const openAlbumPanel = () => {
+    setSongPanelOpen(false);
+    setAlbumPanelOpen(true);
+    if (candidates.length === 0 && candidatePhase !== 'loading') void loadCandidates();
+  };
+
+  const closePanels = () => {
+    setSongPanelOpen(false);
+    setAlbumPanelOpen(false);
+  };
+
+  const candidateKey = (candidate: UnifiedTrack): string => {
+    const track = toTrack(candidate);
+    return track ? trackKey(track) : `${candidate.title}-${candidate.artist}`;
+  };
+
+  const downloadCandidate = async (candidate: UnifiedTrack) => {
+    const track = toTrack(candidate);
+    if (!track) {
+      Alert.alert('Unavailable', 'This result cannot be downloaded.');
+      return;
+    }
+    const key = trackKey(track);
+    const existing = downloads.find((item) => item.key === key);
+    if (existing?.status === 'complete') {
+      Alert.alert('Already downloaded', 'This track is already in your downloads.');
+      return;
+    }
+    setDownloadingKey(key);
+    try {
+      await downloadTrack(track, 'original', { metadata: true });
+    } finally {
+      setDownloadingKey(null);
+    }
+  };
+
+  const downloadAlbumTracks = async (tracks: { candidate: UnifiedTrack; index: number }[]) => {
+    if (!result) return;
+    const artist = sanitizeFileName(result.artist || 'Unknown Artist');
+    const album = sanitizeFileName(result.album || result.title || 'Album');
+    const dir = new Directory(downloadsDirectory, artist, album);
+    for (const { candidate, index } of tracks) {
+      const track = toTrack(candidate);
+      if (!track || track.download.status !== 'available') continue;
+      const key = trackKey(track);
+      setDownloadingKey(key);
+      const ext = normaliseExtension(track.download.originalFormat);
+      const fileName = `${String(index + 1).padStart(2, '0')} - ${sanitizeFileName(track.title)}${ext}`;
+      await downloadTrack(track, 'original', { directory: dir, fileName, metadata: true });
+    }
+    setDownloadingKey(null);
+  };
+
+  const sanitizeFileName = (value: string): string => value.replace(/[<>:"/\\|?*]/g, '').trim() || 'track';
+
+  const hasDownloadable = (items: RankedCandidate[]): boolean => items.some((item) => item.track.downloadable);
+
+  const allTracksAvailable = (items: RankedCandidate[]): boolean =>
+    items.length > 0 && items.every((item) => item.track.downloadable);
+
+  const normaliseExtension = (format: string | undefined): string => {
+    if (!format) return '.mp3';
+    const cleaned = format.trim().toLowerCase();
+    if (cleaned.startsWith('.')) return cleaned;
+    if (cleaned === 'mp3') return '.mp3';
+    if (cleaned === 'm4a' || cleaned === 'mp4') return '.m4a';
+    if (cleaned === 'wav') return '.wav';
+    if (cleaned === 'flac') return '.flac';
+    if (cleaned === 'ogg') return '.ogg';
+    return `.${cleaned}`;
+  };
+
+  const downloadAlbumZip = async () => {
+    if (!result || zipping) return;
+    const toZip = candidates
+      .map((candidate, index) => ({ candidate: candidate.track, index }))
+      .filter(({ candidate }) => {
+        const track = toTrack(candidate);
+        if (!track || track.download.status !== 'available') return false;
+        const key = trackKey(track);
+        const anySelected = Object.values(selectedTracks).some(Boolean);
+        return anySelected ? !!selectedTracks[key] : true;
+      });
+
+    const missing = candidates
+      .map((candidate) => candidate.track)
+      .filter((candidate) => {
+        const track = toTrack(candidate);
+        return !track || track.download.status !== 'available';
+      })
+      .map((candidate) => candidate.title);
+
+    if (toZip.length === 0) {
+      Alert.alert('No tracks available', 'There are no authorised tracks to include in the ZIP.');
+      return;
+    }
+
+    setZipping(true);
+    try {
+      const artist = sanitizeFileName(result.artist || 'Unknown Artist');
+      const album = sanitizeFileName(result.album || result.title || 'Album');
+      const tempDir = new Directory(downloadsDirectory, '.tmp', `${artist}-${album}`);
+      if (!tempDir.exists) tempDir.create({ intermediates: true, idempotent: true });
+
+      const fileEntries: { name: string; uri: string }[] = [];
+      for (const { candidate, index } of toZip) {
+        const track = toTrack(candidate);
+        if (!track) continue;
+        const key = trackKey(track);
+        setDownloadingKey(key);
+        const ext = normaliseExtension(track.download.status === 'available' ? track.download.originalFormat : undefined);
+        const fileName = `${String(index + 1).padStart(2, '0')} - ${sanitizeFileName(track.title)}${ext}`;
+        await downloadTrack(track, 'original', { directory: tempDir, fileName, metadata: true });
+        fileEntries.push({ name: fileName, uri: new File(tempDir, fileName).uri });
+      }
+      setDownloadingKey(null);
+
+      const entries: { name: string; data: Uint8Array }[] = [];
+      const coverUrl = result.coverUrl || result.soundcloud?.coverUrl;
+      if (coverUrl) {
+        try {
+          const response = await fetch(coverUrl);
+          if (response.ok) {
+            const buffer = await response.arrayBuffer();
+            entries.push({ name: 'cover.jpg', data: new Uint8Array(buffer) });
+          }
+        } catch {
+          // Best-effort cover art.
+        }
+      }
+
+      for (const file of fileEntries) {
+        const base64 = await FileSystem.readAsStringAsync(file.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        entries.push({ name: file.name, data: base64ToUint8(base64) });
+      }
+
+      const zipBytes = createZip(entries);
+      const soundCatchDir = new Directory(downloadsDirectory, 'SoundCatch');
+      if (!soundCatchDir.exists) soundCatchDir.create({ intermediates: true, idempotent: true });
+      const zipName = `${artist} - ${album}.zip`;
+      const zipFile = new File(soundCatchDir, zipName);
+      await FileSystem.writeAsStringAsync(zipFile.uri, uint8ToBase64(zipBytes), {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      try {
+        if (tempDir.exists) tempDir.delete();
+      } catch {
+        // Best-effort cleanup.
+      }
+
+      if (missing.length > 0) {
+        Alert.alert('Album ZIP created', `Saved ${zipName}. Missing/unavailable tracks: ${missing.join(', ')}.`);
+      } else {
+        Alert.alert('Album ZIP created', `Saved ${zipName} to Downloads/SoundCatch.`);
+      }
+    } catch (error) {
+      Alert.alert('ZIP failed', error instanceof Error ? error.message : 'Could not create the album ZIP.');
+    } finally {
+      setZipping(false);
+      setDownloadingKey(null);
+    }
   };
 
   const elapsed = Math.min(LISTEN_SECONDS, Math.floor(recorderState.durationMillis / 1000));
@@ -338,6 +571,21 @@ export default function RecogniseScreen() {
               />
             ) : null}
 
+            <View style={styles.downloadButtons}>
+              <Pressable onPress={openSongPanel} style={styles.downloadButton} accessibilityRole="button" accessibilityLabel="Download Song">
+                <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.downloadButtonFill}>
+                  <Ionicons name="download-outline" size={18} color={colors.text} />
+                  <Text style={styles.downloadButtonLabel}>Download Song</Text>
+                </LinearGradient>
+              </Pressable>
+              <Pressable onPress={openAlbumPanel} style={styles.downloadButton} accessibilityRole="button" accessibilityLabel="Download Album">
+                <LinearGradient colors={gradients.accent} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.downloadButtonFill}>
+                  <Ionicons name="albums-outline" size={18} color={colors.text} />
+                  <Text style={styles.downloadButtonLabel}>Download Album</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+
             <View style={styles.actions}>
               {result.spotifyUrl ? (
                 <GlassButton label="Open in Spotify" onPress={() => void Linking.openURL(result.spotifyUrl!)} variant="primary" style={styles.action} />
@@ -348,17 +596,217 @@ export default function RecogniseScreen() {
               {result.soundcloud?.sourceUrl ? (
                 <GlassButton label="Open in SoundCloud" onPress={() => void Linking.openURL(result.soundcloud!.sourceUrl!)} variant="glass" style={styles.action} />
               ) : null}
-              {result.soundcloud?.downloadable ? (
-                <GlassButton
-                  label="Download"
-                  onPress={() => void downloadResult()}
-                  variant="primary"
-                  loading={downloading}
-                  disabled={downloading}
-                  style={styles.action}
-                />
-              ) : null}
             </View>
+
+            {songPanelOpen ? (
+              <View style={styles.panel}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelTitle}>Download Song</Text>
+                  <Pressable onPress={closePanels} accessibilityLabel="Close">
+                    <Ionicons name="close" size={20} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+                <Text style={styles.panelBody}>
+                  SoundCatch searches authorised sources for the recognised recording and ranks matches by artist, title, duration and version.
+                </Text>
+                {candidatePhase === 'loading' ? (
+                  <View style={styles.panelLoading}>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text style={styles.panelBody}>Searching authorised sources…</Text>
+                  </View>
+                ) : null}
+                {candidatePhase === 'error' ? (
+                  <Text style={styles.panelError}>{candidateError}</Text>
+                ) : null}
+                {candidatePhase === 'done' && candidates.length === 0 ? (
+                  <Text style={styles.panelBody}>No matching recordings were found.</Text>
+                ) : null}
+                {candidates.map((item, index) => {
+                  const track = toTrack(item.track);
+                  const key = track ? trackKey(track) : item.track.title;
+                  const record = track ? downloads.find((d) => d.key === key) : undefined;
+                  const isDownloading = downloadingKey === key || record?.status === 'downloading';
+                  const isComplete = record?.status === 'complete';
+                  return (
+                    <View key={key} style={styles.candidateRow}>
+                      {item.track.coverUrl ? (
+                        <Image source={{ uri: item.track.coverUrl }} style={styles.candidateCover} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.candidateCover, styles.coverFallback]}>
+                          <Ionicons name="musical-notes" size={16} color={colors.textMuted} />
+                        </View>
+                      )}
+                      <View style={styles.candidateMeta}>
+                        <Text style={styles.candidateTitle} numberOfLines={1}>{item.track.title}</Text>
+                        <Text style={styles.candidateArtist} numberOfLines={1}>{item.track.artist}</Text>
+                        <Text style={styles.candidateDetail} numberOfLines={2}>
+                          {item.track.sourceName ?? item.track.source}
+                          {item.track.format ? ` · ${item.track.format}` : ''}
+                          {item.track.classification ? ` · ${classificationLabel(item.track.classification)}` : ''}
+                          {index === 0 ? ' · Best match' : ''}
+                        </Text>
+                        {item.confidence === 'low' && index === 0 ? (
+                          <Text style={styles.panelWarning}>Low confidence — please confirm this is the right recording.</Text>
+                        ) : null}
+                        {item.reasons.length > 0 ? (
+                          <Text style={styles.candidateReasons} numberOfLines={2}>{item.reasons.join(' · ')}</Text>
+                        ) : null}
+                        {record?.status === 'downloading' ? (
+                          <View style={styles.progressTrack}>
+                            <View style={[styles.progressFill, { width: `${Math.max(4, Math.round((record.progress ?? 0) * 100))}%` }]} />
+                          </View>
+                        ) : null}
+                        {record?.status === 'failed' && record.error ? (
+                          <Text style={styles.panelError}>{record.error}</Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.candidateActions}>
+                        {item.track.downloadable ? (
+                          <GlassButton
+                            label={isComplete ? 'Downloaded' : isDownloading ? 'Downloading…' : 'Download'}
+                            onPress={() => void downloadCandidate(item.track)}
+                            variant="primary"
+                            loading={isDownloading}
+                            disabled={isDownloading || isComplete}
+                            style={styles.candidateButton}
+                          />
+                        ) : (
+                          <GlassButton
+                            label="Open source"
+                            onPress={() => {
+                              if (item.track.sourceUrl) void Linking.openURL(item.track.sourceUrl);
+                            }}
+                            variant="glass"
+                            style={styles.candidateButton}
+                          />
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+                {!hasDownloadable(candidates) && candidates.length > 0 ? (
+                  <View style={styles.panelNote}>
+                    <Ionicons name="information-circle-outline" size={16} color={colors.warning} />
+                    <Text style={styles.panelBody}>
+                      No authorised download is available for this recording. Use the listening or purchase links above.
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
+            {albumPanelOpen ? (
+              <View style={styles.panel}>
+                <View style={styles.panelHeader}>
+                  <Text style={styles.panelTitle}>Download Album</Text>
+                  <Pressable onPress={closePanels} accessibilityLabel="Close">
+                    <Ionicons name="close" size={20} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+                <View style={styles.albumHeader}>
+                  {result.coverUrl ? (
+                    <Image source={{ uri: result.coverUrl }} style={styles.albumCover} contentFit="cover" />
+                  ) : (
+                    <View style={[styles.albumCover, styles.coverFallback]}>
+                      <Ionicons name="albums" size={24} color={colors.textMuted} />
+                    </View>
+                  )}
+                  <View style={styles.albumMeta}>
+                    <Text style={styles.albumTitle}>{result.album || result.title}</Text>
+                    <Text style={styles.albumArtist}>{result.artist}</Text>
+                    {releaseYear ? <Text style={styles.albumYear}>{releaseYear}</Text> : null}
+                    <Text style={styles.albumTracks}>{candidates.length} track{candidates.length === 1 ? '' : 's'} found</Text>
+                  </View>
+                </View>
+                {candidatePhase === 'loading' ? (
+                  <View style={styles.panelLoading}>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text style={styles.panelBody}>Searching authorised sources…</Text>
+                  </View>
+                ) : null}
+                {candidatePhase === 'error' ? (
+                  <Text style={styles.panelError}>{candidateError}</Text>
+                ) : null}
+                {candidates.map((item, index) => {
+                  const track = toTrack(item.track);
+                  const key = track ? trackKey(track) : item.track.title;
+                  const checked = !!selectedTracks[key];
+                  const available = item.track.downloadable;
+                  return (
+                    <Pressable
+                      key={key}
+                      onPress={() => {
+                        if (!available) return;
+                        setSelectedTracks((prev) => ({ ...prev, [key]: !prev[key] }));
+                      }}
+                      style={styles.albumTrackRow}
+                    >
+                      <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+                        {checked ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
+                      </View>
+                      <View style={styles.albumTrackMeta}>
+                        <Text style={styles.albumTrackTitle} numberOfLines={1}>
+                          {String(index + 1).padStart(2, '0')} · {item.track.title}
+                        </Text>
+                        <Text style={styles.albumTrackArtist} numberOfLines={1}>{item.track.artist}</Text>
+                      </View>
+                      <Text style={[styles.availabilityBadge, available ? styles.available : styles.unavailable]}>
+                        {available ? 'Available' : 'Unavailable'}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+                <View style={styles.albumActions}>
+                  <GlassButton
+                    label="Download available tracks"
+                    onPress={() => {
+                      const toDownload = candidates
+                        .map((candidate, index) => ({ candidate: candidate.track, index }))
+                        .filter(({ candidate }) => {
+                          const track = toTrack(candidate);
+                          if (!track || track.download.status !== 'available') return false;
+                          const key = trackKey(track);
+                          const anySelected = Object.values(selectedTracks).some(Boolean);
+                          return anySelected ? !!selectedTracks[key] : true;
+                        });
+                      void downloadAlbumTracks(toDownload);
+                    }}
+                    variant="primary"
+                    loading={downloadingKey !== null}
+                    disabled={downloadingKey !== null || !hasDownloadable(candidates)}
+                    style={styles.albumActionButton}
+                  />
+                  <GlassButton
+                    label="Download full album"
+                    onPress={() => {
+                      const toDownload = candidates.map((candidate, index) => ({ candidate: candidate.track, index }));
+                      void downloadAlbumTracks(toDownload);
+                    }}
+                    variant="glass"
+                    loading={downloadingKey !== null}
+                    disabled={downloadingKey !== null || !allTracksAvailable(candidates)}
+                    style={styles.albumActionButton}
+                  />
+                </View>
+                   <GlassButton
+                     label="Download album ZIP"
+                     onPress={() => void downloadAlbumZip()}
+                     variant="primary"
+                     loading={zipping}
+                     disabled={zipping || downloadingKey !== null || !hasDownloadable(candidates)}
+                     style={styles.albumActionButton}
+                   />
+
+                {!allTracksAvailable(candidates) && candidates.length > 0 ? (
+                  <Text style={styles.panelBody}>
+                    Full album download is only offered when every track is authorised and available.
+                  </Text>
+                ) : null}
+                <Text style={styles.panelBody}>
+                  Tracks are saved as 01 - Track Title.mp3 inside Music/SoundCatch/{sanitizeFileName(result.artist)}/{sanitizeFileName(result.album || result.title)}.
+                </Text>
+              </View>
+            ) : null}
 
             <GlassButton label="Listen again" onPress={reset} variant="glass" style={styles.cardAction} />
           </GlassCard>
@@ -420,4 +868,45 @@ const styles = StyleSheet.create({
   stepText: { flex: 1, gap: 2 },
   stepTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
   stepBody: { fontSize: 12, lineHeight: 18, color: colors.textMuted },
+  downloadButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  downloadButton: { flex: 1, borderRadius: radius.pill, overflow: 'hidden' },
+  downloadButtonFill: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
+  downloadButtonLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  panel: { marginTop: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.glass, borderWidth: 1, borderColor: colors.glassBorder, gap: spacing.sm },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  panelTitle: { ...typeTokens.heading, fontSize: 16 },
+  panelBody: { fontSize: 13, lineHeight: 19, color: colors.textMuted },
+  panelLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  panelError: { fontSize: 12, lineHeight: 18, color: colors.danger },
+  panelWarning: { fontSize: 12, lineHeight: 18, color: colors.warning },
+  panelNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: spacing.sm },
+  progressTrack: { height: 4, borderRadius: radius.pill, backgroundColor: colors.glass, overflow: 'hidden', marginTop: spacing.xs },
+  progressFill: { height: 4, borderRadius: radius.pill, backgroundColor: colors.primary },
+  candidateRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.glassBorder },
+  candidateCover: { width: 48, height: 48, borderRadius: radius.sm, backgroundColor: colors.bgAlt },
+  candidateMeta: { flex: 1, gap: 2 },
+  candidateTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
+  candidateArtist: { fontSize: 12, color: colors.textMuted },
+  candidateDetail: { fontSize: 11, color: colors.textMuted },
+  candidateReasons: { fontSize: 10, color: colors.textMuted, fontStyle: 'italic' },
+  candidateActions: { justifyContent: 'center' },
+  candidateButton: { minWidth: 96 },
+  albumHeader: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
+  albumCover: { width: 72, height: 72, borderRadius: radius.md, backgroundColor: colors.bgAlt },
+  albumMeta: { flex: 1, gap: 2 },
+  albumTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  albumArtist: { fontSize: 13, color: 'rgba(248,250,252,0.8)' },
+  albumYear: { fontSize: 12, color: colors.textMuted },
+  albumTracks: { fontSize: 12, color: colors.textMuted },
+  albumTrackRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.glassBorder },
+  checkbox: { width: 20, height: 20, borderRadius: 4, borderWidth: 1, borderColor: colors.glassBorder, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: colors.primary, borderColor: colors.primary },
+  albumTrackMeta: { flex: 1, gap: 2 },
+  albumTrackTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  albumTrackArtist: { fontSize: 11, color: colors.textMuted },
+  availabilityBadge: { fontSize: 11, fontWeight: '700', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1 },
+  available: { color: colors.success, borderColor: 'rgba(52,211,153,0.4)' },
+  unavailable: { color: colors.textMuted, borderColor: colors.glassBorder },
+  albumActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },
+  albumActionButton: { minWidth: 150 },
 });

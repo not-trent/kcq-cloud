@@ -18,6 +18,7 @@ export interface Track {
   id: string;
   title: string;
   artist: string;
+  album?: string;
   durationMs: number;
   artworkUrl?: string;
   permalinkUrl: string;
@@ -32,15 +33,25 @@ export interface Track {
   conversion: ConversionOffer;
 }
 
+export type SourceClassification =
+  | 'authorised_download'
+  | 'purchase_required'
+  | 'streaming_only'
+  | 'download_rights_unverified'
+  | 'download_prohibited';
+
 export interface UnifiedTrack {
   title: string;
   artist: string;
   album?: string;
   coverUrl?: string;
   previewUrl?: string;
-  source: 'deezer' | 'itunes' | 'soundcloud';
+  source: string;
+  sourceName?: string;
   sourceUrl?: string;
   downloadable: boolean;
+  classification?: SourceClassification;
+  format?: string;
   provider?: string;
   id?: string;
   download?: DownloadAvailability;

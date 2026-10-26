@@ -1,30 +1,61 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { authHeaders, downloadUrl, type Track } from '@/lib/api';
+import { embedMetadata } from '@/lib/metadata';
 import { library, trackKey } from '@/store/library';
 
-/** Downloads live in the app's document directory so the system never evicts them. */
+export interface DownloadOptions {
+  directory?: Directory;
+  fileName?: string;
+  metadata?: boolean;
+}
+
 export const downloadsDirectory = new Directory(Paths.document, 'downloads');
 
-/**
- * Streams a track through the SoundCatch server into the downloads directory.
- * The server decides whether a download is allowed; this function never guesses.
- */
-export async function downloadTrack(track: Track, format: 'original' | 'mp3' = 'original'): Promise<void> {
+export async function downloadTrack(
+  track: Track,
+  format: 'original' | 'mp3' = 'original',
+  options: DownloadOptions = {},
+): Promise<void> {
   const key = trackKey(track);
+
   library.startDownload(track);
   try {
-    if (!downloadsDirectory.exists) downloadsDirectory.create({ intermediates: true, idempotent: true });
-    const file = await File.downloadFileAsync(downloadUrl(track, format), downloadsDirectory, {
+    const dir = options.directory ?? downloadsDirectory;
+    if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
+    const file = await File.downloadFileAsync(downloadUrl(track, format), dir, {
       headers: authHeaders(),
       idempotent: true,
       onProgress: ({ bytesWritten, totalBytes }) => {
         library.updateProgress(key, totalBytes > 0 ? bytesWritten / totalBytes : 0);
       },
     });
+
+    let saved: File = file;
+    if (options.fileName && file.name !== options.fileName) {
+      const target = new File(dir, options.fileName);
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      await FileSystem.writeAsStringAsync(target.uri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      try {
+        if (file.exists) file.delete();
+      } catch {
+        // Best-effort cleanup of the original server-named file.
+      }
+      saved = target;
+    }
+
+    if (options.metadata !== false && saved.name.toLowerCase().endsWith('.mp3')) {
+      await embedMetadata(saved, track);
+    }
+
     library.finishDownload(key, {
-      fileUri: file.uri,
-      fileName: file.name,
-      sizeBytes: safeSize(file),
+      fileUri: saved.uri,
+      fileName: saved.name,
+      sizeBytes: safeSize(saved),
     });
   } catch (error) {
     library.failDownload(key, describeDownloadError(error));
