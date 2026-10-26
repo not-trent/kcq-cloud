@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { ProviderRegistry } from '../src/providers/registry.js';
@@ -61,9 +61,30 @@ function app(creds = true) {
   return buildApp(loadConfig({}), new ProviderRegistry([new SoundCloudProvider(client)]));
 }
 
+let originalGlobalFetch: typeof fetch;
+
+function fakeGlobalFetch(): typeof fetch {
+  return (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith('https://api.deezer.com/search')) {
+      return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (url.startsWith('https://itunes.apple.com/search')) {
+      return new Response(JSON.stringify({ results: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error('unmocked global fetch: ' + url);
+  }) as typeof fetch;
+}
+
 beforeEach(() => {
   calls = [];
   tokenRequests = 0;
+  originalGlobalFetch = globalThis.fetch;
+  globalThis.fetch = fakeGlobalFetch();
+});
+
+afterEach(() => {
+  globalThis.fetch = originalGlobalFetch;
 });
 
 describe('API', () => {
@@ -103,7 +124,8 @@ describe('API', () => {
 
   it('503 when credentials are missing', async () => {
     const r = await app(false).inject('/v1/search?q=x');
-    expect(r.statusCode).toBe(503);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().items.some((i: any) => i.source === 'soundcloud')).toBe(false);
   });
 
   it('downloads the original file; credentials go only to the API host', async () => {
