@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/EmptyState';
 import { useDockSpace } from '@/components/GlassDock';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { TrackRow } from '@/components/TrackRow';
-import { api, looksLikeUrl, type Track } from '@/lib/api';
+import { api, looksLikeUrl, type UnifiedTrack } from '@/lib/api';
 import { library, useLibrary } from '@/store/library';
 import { colors, radius, spacing } from '@/theme/tokens';
 
@@ -22,7 +22,7 @@ export default function SearchScreen() {
 
   const [text, setText] = useState(typeof params.q === 'string' ? params.q : '');
   const [phase, setPhase] = useState<Phase>('idle');
-  const [items, setItems] = useState<Track[]>([]);
+  const [items, setItems] = useState<UnifiedTrack[]>([]);
   const [nextOffset, setNextOffset] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -52,10 +52,14 @@ export default function SearchScreen() {
         library.addRecentSearch(query);
         setItems([track]);
         setPhase('done');
-        router.push({
-          pathname: '/track/[provider]/[id]',
-          params: { provider: track.provider, id: track.id },
-        });
+        if (track.provider && track.id) {
+          router.push({
+            pathname: '/track/[provider]/[id]',
+            params: { provider: track.provider, id: track.id },
+          });
+        } else if (track.sourceUrl) {
+          void Linking.openURL(track.sourceUrl);
+        }
         return;
       }
 
@@ -123,7 +127,7 @@ export default function SearchScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <FlatList
         data={items}
-        keyExtractor={(item) => `${item.provider}:${item.id}`}
+        keyExtractor={(item, index) => `${item.source}-${item.provider ?? ''}-${item.id ?? item.sourceUrl ?? item.title}-${index}`}
         contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: dockSpace }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -201,17 +205,41 @@ export default function SearchScreen() {
             ) : null}
           </View>
         }
-        renderItem={({ item }) => (
-          <TrackRow
-            track={item}
-            onPress={() =>
-              router.push({
-                pathname: '/track/[provider]/[id]',
-                params: { provider: item.provider, id: item.id },
-              })
+        renderItem={({ item }) => {
+          const badgeLabel =
+            item.source === 'deezer' ? 'Deezer' : item.source === 'itunes' ? 'iTunes' : 'SoundCloud';
+          const badgeColor =
+            item.source === 'deezer' ? colors.secondary : item.source === 'itunes' ? colors.highlight : colors.success;
+          const open = () => {
+            if (item.source === 'soundcloud' && item.provider && item.id) {
+              router.push({ pathname: '/track/[provider]/[id]', params: { provider: item.provider, id: item.id } });
+            } else if (item.sourceUrl) {
+              void Linking.openURL(item.sourceUrl);
             }
-          />
-        )}
+          };
+          return (
+            <Pressable onPress={open} style={({ pressed }) => [styles.resultRow, pressed && styles.pressed]}>
+              {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.cover} contentFit="cover" transition={150} />
+              ) : (
+                <View style={[styles.cover, styles.coverFallback]}>
+                  <Ionicons name="musical-notes" size={20} color={colors.textMuted} />
+                </View>
+              )}
+              <View style={styles.resultBody}>
+                <Text style={styles.resultTitle} numberOfLines={1}>
+                  {item.title}
+                </Text>
+                <Text style={styles.resultArtist} numberOfLines={1}>
+                  {item.artist}
+                </Text>
+              </View>
+              <View style={[styles.badge, { borderColor: badgeColor }]}>
+                <Text style={[styles.badgeText, { color: badgeColor }]}>{badgeLabel}</Text>
+              </View>
+            </Pressable>
+          );
+        }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           phase === 'loading' ? (
@@ -327,6 +355,48 @@ const styles = StyleSheet.create({
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.glassBorder,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  cover: {
+    width: 52,
+    height: 52,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgAlt,
+  },
+  coverFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultBody: {
+    flex: 1,
+    gap: 2,
+  },
+  resultTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  resultArtist: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  badge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   loading: {
     alignItems: 'center',

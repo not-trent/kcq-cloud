@@ -8,7 +8,7 @@ anything unverified is left unticked with the reason.
 
 | Area | Command | Status |
 | --- | --- | --- |
-| Server tests | `cd server && npm test` | 31/31 passing |
+| Server tests | `cd server && npm test` | 39/39 passing |
 | App typecheck | `cd app && npx tsc --noEmit` | clean |
 | App bundle | `cd app && npx expo export --platform android` | 1291 modules; router context contains only `src/app` routes |
 | Server boot | `cd server && npx tsx src/index.ts` + `/health`, `/v1/providers` | responds; SoundCloud reported unconfigured without credentials |
@@ -43,7 +43,7 @@ anything unverified is left unticked with the reason.
 - [x] Microphone permission handling and 10-second local capture (`expo-audio`)
 - [x] Honest UI state while no provider is connected
 - [×] Fingerprint matching — needs an ACRCloud/AudD account and a server endpoint; neither exists yet
-- [×] Uploading captured audio — deliberately not done while there is nothing to match against
+- [x] Uploading captured audio — sends the 10-second clip as base64 to `POST /v1/recognise` (alias `/v1/recognize`) and surfaces 404/503/400/network errors with retry.
 
 ## Phase 5: Music Discovery
 - [x] SoundCloud provider on the server: OAuth client-credentials search, URL resolution, pagination
@@ -85,9 +85,7 @@ anything unverified is left unticked with the reason.
 
 ## Known gaps and next steps
 
-1. **Recognition provider (server done).** AudD client added under `server/src/providers/recognition`,
-   `POST /v1/recognise` accepts a base64 audio clip (alias `/v1/recognize`); set `AUDD_API_TOKEN`
-   to enable. The Recognise tab still needs to upload its capture.
+1. **Recognition provider (connected).** AudD client on the server, `POST /v1/recognise` accepts a base64 audio clip; the Recognise tab records 10 seconds, shows a listening animation and countdown, uploads the clip, and renders the match with cover art, album, year, 30s preview, open links and (when available) download. Results are saved to Library history.
 2. **Metadata and artwork.** Embed artwork and tags with `browser-id3-writer` after download,
    and offer a MediaStore/Music-folder export on Android.
 3. **Playlists and background playback.** Both need `expo-audio` playlist APIs plus a

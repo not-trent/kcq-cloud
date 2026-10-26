@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 /**
  * The mobile client talks only to the SoundCatch server in `server/`, never to a
  * music provider directly. These types mirror `server/src/providers/types.ts` —
@@ -34,8 +32,56 @@ export interface Track {
   conversion: ConversionOffer;
 }
 
+export interface UnifiedTrack {
+  title: string;
+  artist: string;
+  album?: string;
+  coverUrl?: string;
+  previewUrl?: string;
+  source: 'deezer' | 'itunes' | 'soundcloud';
+  sourceUrl?: string;
+  downloadable: boolean;
+  provider?: string;
+  id?: string;
+  download?: DownloadAvailability;
+  durationMs?: number;
+  genre?: string;
+  releaseYear?: number;
+  license?: string;
+  isrc?: string;
+  attribution?: { providerName: string; creatorUrl?: string };
+}
+
+export interface RecognitionMatch {
+  title: string;
+  artist: string;
+  album?: string;
+  releaseDate?: string;
+  score?: number;
+  songLink?: string;
+  coverUrl?: string;
+  albumId?: string;
+  previewUrl?: string;
+  appleMusicUrl?: string;
+  spotifyUrl?: string;
+}
+
+export interface RecogniseResult {
+  match: RecognitionMatch;
+  track: RecognitionMatch;
+  title: string;
+  artist: string;
+  album?: string;
+  coverUrl?: string;
+  albumId?: string;
+  previewUrl?: string;
+  appleMusicUrl?: string;
+  spotifyUrl?: string;
+  soundcloud?: UnifiedTrack | null;
+}
+
 export interface SearchPage {
-  items: Track[];
+  items: UnifiedTrack[];
   nextOffset?: number;
 }
 
@@ -56,11 +102,7 @@ export interface SearchOptions {
   signal?: AbortSignal;
 }
 
-const DEFAULT_PORT = 8787;
-/** Android emulators reach the host machine through 10.0.2.2, not localhost. */
-const fallbackBase = Platform.OS === 'android' ? `http://10.0.2.2:${DEFAULT_PORT}` : `http://localhost:${DEFAULT_PORT}`;
-
-export const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? fallbackBase).replace(/\/+$/, '');
+export const API_BASE = (process.env.EXPO_PUBLIC_API_URL ?? 'http://192.168.0.186:8787').replace(/\/+$/, '');
 const API_KEY = process.env.EXPO_PUBLIC_API_KEY ?? '';
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -128,7 +170,7 @@ export const api = {
     return request<SearchPage>(`/v1/search?${params.toString()}`, { signal });
   },
   resolve: (url: string, signal?: AbortSignal) =>
-    request<Track>('/v1/resolve', {
+    request<UnifiedTrack>('/v1/resolve', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: url.trim() }),
@@ -136,6 +178,13 @@ export const api = {
     }),
   track: (provider: string, id: string, signal?: AbortSignal) =>
     request<Track>(`/v1/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(id)}`, { signal }),
+  recognise: (audioBase64: string, mimeType: string, signal?: AbortSignal) =>
+    request<RecogniseResult>('/v1/recognise', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ audio: audioBase64, mimeType }),
+      signal,
+    }),
 };
 
 function safeJson(text: string): unknown {
