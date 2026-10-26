@@ -1,0 +1,23 @@
+
+> soundcatch-server@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.5 [39m[90mE:/kcq cloud/soundcatch/server[39m
+
+ [32m✓[39m test/search.unified.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 505[2mms[22m[39m
+   [32m✓[39m unified search [2m(3)[22m
+     [33m[2m✓[22m[39m merges deezer, itunes and soundcloud[33m 463[2mms[22m[39m
+ [32m✓[39m test/search.relevance.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 490[2mms[22m[39m
+   [32m✓[39m relevance filtering [2m(1)[22m
+     [33m[2m✓[22m[39m drops results that do not contain any query word[33m 422[2mms[22m[39m
+ [32m✓[39m test/api.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 651[2mms[22m[39m
+   [32m✓[39m API [2m(10)[22m
+     [33m[2m✓[22m[39m search maps tracks, drops incomplete ones, and reuses one token[33m 490[2mms[22m[39m
+ [32m✓[39m test/soundcloud.unit.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m39 passed[39m[22m[90m (39)[39m
+[2m   Start at [22m 15:15:27
+[2m   Duration [22m 1.77s[2m (tests 49%, import 42%, transform 7%, worker 1%)[22m
+

@@ -12,7 +12,7 @@ const dlTrack = {
   duration: 1000, user: { username: 'A' }, downloadable: true, access: 'playable', license: 'cc-by',
   download_url: 'https://api.soundcloud.com/tracks/soundcloud:tracks:1/download',
 };
-const streamOnly = { ...dlTrack, urn: 'soundcloud:tracks:2', title: 'Stream', downloadable: false, download_url: null, license: 'all-rights-reserved' };
+const streamOnly = { ...dlTrack, urn: 'soundcloud:tracks:2', title: 'Free Stream', downloadable: false, download_url: null, license: 'all-rights-reserved' };
 
 let calls: Call[];
 let tokenRequests: number;

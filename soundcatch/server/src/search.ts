@@ -21,12 +21,42 @@ export interface UnifiedTrack {
   attribution?: CatalogTrack['attribution'];
 }
 
-function norm(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, ' ');
+function normText(s: string): string {
+  return s.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function key(t: UnifiedTrack): string {
-  return `${norm(t.title)}::${norm(t.artist)}`;
+function stripDecorations(s: string): string {
+  let t = s;
+  t = t.replace(/[\(\[][^)\]]*[\)\]]/g, (m) => {
+    if (/feat|ft\.?|remaster|explicit|deluxe|bonus|anniversary|edition/i.test(m)) return '';
+    return m;
+  });
+  t = t.replace(/\b(feat|ft)\.?\s+[a-z0-9][a-z0-9 &,'-]*/gi, '');
+  return t;
+}
+
+function dedupKey(t: UnifiedTrack): string {
+  const title = normText(stripDecorations(t.title));
+  const artist = normText(stripDecorations(t.artist));
+  return `${title}::${artist}`;
+}
+
+function queryWords(q: string): string[] {
+  return normText(q).split(' ').filter(Boolean);
+}
+
+function score(t: UnifiedTrack, qWords: string[], qNorm: string): number {
+  const title = normText(t.title);
+  const artist = normText(t.artist);
+  let s = 0;
+  if (title === qNorm) s += 100;
+  if (qNorm.length > 0 && title.includes(qNorm)) s += 50;
+  for (const w of qWords) {
+    if (title.includes(w)) s += 10;
+    if (artist.includes(w)) s += 5;
+  }
+  if (artist === qNorm) s += 25;
+  return s;
 }
 
 async function searchDeezer(query: string, limit: number): Promise<UnifiedTrack[]> {
@@ -140,24 +170,36 @@ export async function unifiedSearch(
     searchSoundCloud(query, registry, limit),
   ]);
 
+  const qWords = queryWords(query);
+  const qNorm = normText(query);
+
+  // Filter out results that don't mention any query word in title or artist.
+  const all = [...deezer, ...itunes, ...soundcloud].filter((t) => {
+    const title = normText(t.title);
+    const artist = normText(t.artist);
+    return qWords.some((w) => title.includes(w) || artist.includes(w));
+  });
+
+  // Dedup by normalized key, preferring downloadable SoundCloud over others.
   const map = new Map<string, UnifiedTrack>();
-  // Add non-SoundCloud first
-  for (const t of [...deezer, ...itunes]) {
-    const k = key(t);
-    if (!map.has(k)) map.set(k, t);
-  }
-  // SoundCloud: replace if downloadable
-  for (const t of soundcloud) {
-    const k = key(t);
+  // Sort so downloadable soundcloud considered last (wins replacement)
+  const ordered = [...all].sort((a, b) => (a.source === 'soundcloud' && a.downloadable ? 1 : 0) - (b.source === 'soundcloud' && b.downloadable ? 1 : 0));
+  for (const t of ordered) {
+    const k = dedupKey(t);
     const existing = map.get(k);
     if (!existing) {
       map.set(k, t);
-    } else if (t.downloadable) {
-      map.set(k, t);
+    } else {
+      const existingDl = existing.source === 'soundcloud' && existing.downloadable;
+      const newDl = t.source === 'soundcloud' && t.downloadable;
+      if (newDl && !existingDl) map.set(k, t);
     }
   }
 
-  return Array.from(map.values()).slice(0, limit * 2);
+  // Score and sort.
+  const scored = Array.from(map.values()).map((t) => ({ t, s: score(t, qWords, qNorm) }));
+  scored.sort((a, b) => b.s - a.s || a.t.title.localeCompare(b.t.title));
+  return scored.map((x) => x.t).slice(0, limit * 2);
 }
 
 export function soundCloudTrackToUnified(t: CatalogTrack): UnifiedTrack {

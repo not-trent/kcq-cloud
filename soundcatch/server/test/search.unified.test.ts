@@ -21,10 +21,13 @@ function fakeFetch(): typeof fetch {
       return new Response(JSON.stringify({ collection: [dlTrack], next_href: 'x' }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.startsWith('https://api.deezer.com/search')) {
-      return new Response(JSON.stringify({ data: [{ title: 'Deezer Hit', artist: { name: 'DZ' }, album: { title: 'Alb', cover_big: 'https://dz/cover.jpg' }, preview: 'https://dz/preview.mp3', link: 'https://deezer.com/track/1' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ data: [
+        { title: 'Free Song', artist: { name: 'A' }, album: { title: 'Alb', cover_big: 'https://dz/cover.jpg' }, preview: 'https://dz/preview.mp3', link: 'https://deezer.com/track/1' },
+        { title: 'Free Deezer', artist: { name: 'DZ' }, album: { title: 'Alb', cover_big: 'https://dz/cover2.jpg' }, preview: 'https://dz/preview2.mp3', link: 'https://deezer.com/track/2' },
+      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.startsWith('https://itunes.apple.com/search')) {
-      return new Response(JSON.stringify({ results: [{ trackName: 'Another', artistName: 'B', collectionName: 'Alb2', artworkUrl100: 'https://it/100x100bb.jpg', previewUrl: 'https://it/preview.m4a', trackViewUrl: 'https://itunes.apple.com/x' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ trackName: 'Free Another', artistName: 'B', collectionName: 'Alb2', artworkUrl100: 'https://it/100x100bb.jpg', previewUrl: 'https://it/preview.m4a', trackViewUrl: 'https://itunes.apple.com/x' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.startsWith('https://api.soundcloud.com/resolve')) {
       return new Response(null, { status: 302, headers: { location: 'https://api.soundcloud.com/tracks/soundcloud:tracks:1' } });
