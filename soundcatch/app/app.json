@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "SoundCatch",
+    "slug": "soundcatch",
+    "scheme": "soundcatch",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0B0B16",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.soundcatch.app"
+    },
+    "android": {
+      "package": "com.soundcatch.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0B16",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["RECORD_AUDIO", "POST_NOTIFICATIONS"],
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-audio",
+        { "microphonePermission": "SoundCatch listens through the microphone to identify the music playing around you." }
+      ],
+      "expo-sqlite",
+      "expo-image",
+      "expo-sharing"
+    ],
+    "experiments": { "typedRoutes": true, "tsconfigPaths": true }
+  }
+}
