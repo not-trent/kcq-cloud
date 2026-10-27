@@ -205,14 +205,38 @@ export async function unifiedSearch(
     return qWords.some((w) => title.includes(w) || artist.includes(w));
   });
 
+  const discoverySources = new Set([
+    'spotify', 'apple-music', 'itunes-store', 'amazon-music', 'bandcamp', 'tidal',
+    'qobuz', 'youtube-music', 'soundcloud-search', 'jamendo', 'free-music-archive',
+    'ccmixter', 'archive-search', 'mp3juices', 'mp3download',
+  ]);
+  const isDiscovery = (t: UnifiedTrack) => discoverySources.has(t.source);
+
+  const realTracks = all.filter((t) => !isDiscovery(t));
+  const discoveryTracks = all.filter((t) => isDiscovery(t));
+
   const map = new Map<string, UnifiedTrack>();
-  const ordered = [...all].sort((a, b) => (a.source === 'soundcloud' && a.downloadable ? 1 : 0) - (b.source === 'soundcloud' && b.downloadable ? 1 : 0));
-  for (const t of ordered) {
-    const k = `${dedupKey(t)}::${t.source}::${t.sourceUrl ?? ''}`;
+  // Non-SoundCloud real tracks first (first wins on dedup key).
+  for (const t of realTracks.filter((t) => t.source !== 'soundcloud')) {
+    const k = dedupKey(t);
+    if (!map.has(k)) map.set(k, t);
+  }
+  // SoundCloud: replace when downloadable (creator-enabled).
+  for (const t of realTracks.filter((t) => t.source === 'soundcloud')) {
+    const k = dedupKey(t);
+    const existing = map.get(k);
+    if (!existing || t.downloadable) map.set(k, t);
+  }
+  // Discovery links stay distinct (one per source/site).
+  for (const t of discoveryTracks) {
+    const k = `discovery::${t.source}::${t.sourceUrl ?? t.title}`;
     if (!map.has(k)) map.set(k, t);
   }
 
-  const scored = Array.from(map.values()).map((t) => ({ t, s: score(t, qWords, qNorm) }));
+  const scored = Array.from(map.values()).map((t) => ({
+    t,
+    s: isDiscovery(t) ? 0 : score(t, qWords, qNorm),
+  }));
   scored.sort((a, b) => b.s - a.s || a.t.title.localeCompare(b.t.title));
   return scored.map((x) => x.t).slice(0, limit * 3);
 }

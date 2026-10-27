@@ -5,6 +5,7 @@ import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, 
 import * as FileSystem from 'expo-file-system/legacy';
 import { Directory, File } from 'expo-file-system';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Sharing from 'expo-sharing';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -14,7 +15,7 @@ import { GlassCard } from '@/components/glass/GlassCard';
 import { useDockSpace } from '@/components/GlassDock';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { api, type RecogniseResult, type Track, type UnifiedTrack } from '@/lib/api';
-import { downloadTrack, downloadsDirectory } from '@/lib/downloads';
+import { downloadTrack, downloadsDirectory, exportFileToSharedDownloads } from '@/lib/downloads';
 import { base64ToUint8, createZip, uint8ToBase64 } from '@/lib/zip';
 import { rankDownloadCandidates, type RankedCandidate } from '@/lib/downloadMatching';
 import { library, trackKey, useLibrary } from '@/store/library';
@@ -427,16 +428,38 @@ export default function RecogniseScreen() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
+      const shared = await exportFileToSharedDownloads(zipFile);
+
       try {
         if (tempDir.exists) tempDir.delete();
       } catch {
         // Best-effort cleanup.
       }
 
+      const location = shared ? 'Downloads/SoundCatch' : 'app storage';
+
+      const shareZip = async () => {
+        try {
+          if (await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(zipFile.uri, { mimeType: 'application/zip', dialogTitle: zipName });
+          }
+        } catch {
+          // Sharing is best-effort.
+        }
+      };
+
       if (missing.length > 0) {
-        Alert.alert('Album ZIP created', `Saved ${zipName}. Missing/unavailable tracks: ${missing.join(', ')}.`);
+        Alert.alert(
+          'Album ZIP created',
+          `Saved ${zipName} to ${location}. Missing/unavailable tracks: ${missing.join(', ')}.`,
+          [{ text: 'Share', onPress: () => void shareZip() }, { text: 'OK' }],
+        );
       } else {
-        Alert.alert('Album ZIP created', `Saved ${zipName} to Downloads/SoundCatch.`);
+        Alert.alert(
+          'Album ZIP created',
+          `Saved ${zipName} to ${location}.`,
+          [{ text: 'Share', onPress: () => void shareZip() }, { text: 'OK' }],
+        );
       }
     } catch (error) {
       Alert.alert('ZIP failed', error instanceof Error ? error.message : 'Could not create the album ZIP.');

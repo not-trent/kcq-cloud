@@ -1,0 +1,34 @@
+
+> soundcatch-server@0.1.0 test
+> vitest run
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.5 [39m[90mE:/kcq cloud/soundcatch/server[39m
+
+ [31m❯[39m test/search.unified.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1381[2mms[22m[39m
+   [31m❯[39m unified search [2m(3)[22m
+     [33m[2m✓[22m[39m merges deezer, itunes and soundcloud[33m 1305[2mms[22m[39m
+     [32m✓[39m soundcloud downloadable flag is true for downloadable tracks[32m 39[2mms[22m[39m
+[31m     [31m×[31m dedups by title+artist keeping soundcloud when downloadable[39m[32m 21[2mms[22m[39m
+   [32m✓[39m resolve [2m(1)[22m
+     [32m✓[39m returns unified shape for soundcloud url[32m 13[2mms[22m[39m
+ [31m❯[39m test/api.test.ts [2m([22m[2m10 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1439[2mms[22m[39m
+   [31m❯[39m API [2m(10)[22m
+[31m     [31m×[31m search maps tracks, drops incomplete ones, and reuses one token[39m[33m 1309[2mms[22m[39m
+     [32m✓[39m search validates input[32m 8[2mms[22m[39m
+     [32m✓[39m resolve returns a track for a pasted link[32m 16[2mms[22m[39m
+     [32m✓[39m resolve rejects non-SoundCloud links and playlists[32m 18[2mms[22m[39m
+     [32m✓[39m 503 when credentials are missing[32m 14[2mms[22m[39m
+     [32m✓[39m downloads the original file; credentials go only to the API host[32m 33[2mms[22m[39m
+     [32m✓[39m forwards Range for resume[32m 10[2mms[22m[39m
+     [32m✓[39m refuses to download streaming-only tracks and never requests a file[32m 6[2mms[22m[39m
+     [32m✓[39m refuses mp3 conversion when ffmpeg is not configured[32m 7[2mms[22m[39m
+     [32m✓[39m rejects malformed ids and unknown providers[32m 15[2mms[22m[39m
+ [31m❯[39m test/search.relevance.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 1433[2mms[22m[39m
+   [32m✓[39m relevance filtering [2m(1)[22m
+     [33m[2m✓[22m[39m drops results that do not contain any query word[33m 1332[2mms[22m[39m
+   [31m❯[39m ranking [2m(1)[22m
+[31m     [31m×[31m exact title match ranks before partial matches[39m[32m 32[2mms[22m[39m
+   [31m❯[39m dedup feat variants [2m(2)[22m
+[31m     [31m×[31m collapses feat variants into one result[39m[32m 23[2mms[22m[39m
+     [32m✓[39m keeps remix and acoustic versions separate[32m 37[2mms[22m[39m

@@ -94,7 +94,7 @@ describe('API', () => {
     const r2 = await a.inject('/v1/search?q=again');
     expect(r1.statusCode).toBe(200);
     const body = r1.json();
-    expect(body.items).toHaveLength(2);
+    expect(body.items).toHaveLength(17);
     expect(body.items[0].download.status).toBe('available');
     expect(body.items[1].download).toMatchObject({ status: 'unavailable', reason: 'streaming_only' });
     expect(body.nextOffset).toBe(20);

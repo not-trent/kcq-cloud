@@ -25,6 +25,7 @@ export interface LibraryState {
   history: Track[];
   downloads: DownloadRecord[];
   recentSearches: string[];
+  sharedStorageUri?: string;
 }
 
 const initialState: LibraryState = {
@@ -131,7 +132,9 @@ export const library = {
     commit({ downloads });
   },
 
-  removeDownload(key: string): void {
+  setSharedStorageUri(uri: string | undefined): void {
+    commit({ sharedStorageUri: uri });
+  },
     const record = state.downloads.find((item) => item.key === key);
     if (record?.fileUri) {
       try {
@@ -168,6 +171,7 @@ async function persist(): Promise<void> {
         history: state.history,
         downloads: state.downloads,
         recentSearches: state.recentSearches,
+        sharedStorageUri: state.sharedStorageUri,
         savedAt: Date.now(),
       }),
     );
@@ -196,6 +200,7 @@ async function hydrate(): Promise<void> {
         history: asArray<Track>(raw.history),
         downloads,
         recentSearches: asArray<string>(raw.recentSearches),
+        sharedStorageUri: typeof raw.sharedStorageUri === 'string' ? raw.sharedStorageUri : undefined,
       };
     }
   } catch {

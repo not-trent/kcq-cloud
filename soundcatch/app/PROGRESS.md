@@ -83,7 +83,21 @@ anything unverified is left unticked with the reason.
 - [×] APK built successfully
 - [×] Installation and testing instructions for a signed build
 
-## Known gaps and next steps
+
+
+## Album ZIP verification update
+
+- SAF export now prompts for `Downloads` and saves to `Downloads/SoundCatch`, with duplicate-filename handling.
+- Success alert shows actual location and offers a Share action.
+- Private fallback retained; user notified via alert location text.
+- Temp directory cleanup retained; interrupted downloads leave partial private ZIP only.
+- Device verification still pending (no Android SDK/device here).
+
+- Shared storage: `downloads.ts` now best-effort exports each completed MP3 to `Music/SoundCatch/Artist/Album/` via Android Storage Access Framework (SAF), caching the granted directory URI in library state. Falls back to private app storage if permission is denied or SAF fails.
+- File naming: `Artist - Track Title.mp3`.
+- Metadata: `metadata.ts` embeds title, artist, album, album artist, genre, year, ISRC and cover art before shared export.
+- ZIP export: now also attempts to copy the generated ZIP to `Downloads/SoundCatch` via SAF (permission prompted), falling back to private app storage.
+- Verification status: code typechecks; on-device verification pending (no Android SDK/device in this environment).
 
 1. **Recognition provider (connected).** AudD client on the server, `POST /v1/recognise` accepts a base64 audio clip; the Recognise tab records 10 seconds, shows a listening animation and countdown, uploads the clip, and renders the match with cover art, album, year, 30s preview, open links and (when available) download. Results are saved to Library history.
 2. **Metadata and artwork.** Embed artwork and tags with `browser-id3-writer` after download,
