@@ -29,12 +29,15 @@ function render() {
 }
 
 async function refresh() {
+  statusEl.dataset.state = 'loading';
   statusEl.textContent = 'Loading...';
   try {
     rows = await KCQ.loadAll();
+    statusEl.dataset.state = 'ready';
     statusEl.textContent = `${rows.length} questions loaded.`;
     render();
   } catch (error) {
+    statusEl.dataset.state = 'error';
     statusEl.textContent = error.message;
   }
 }

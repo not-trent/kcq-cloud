@@ -31,14 +31,25 @@ KCQ Cloud brings Moodle quiz questions and marked answers into one shared Supaba
 
 ## Quick install
 
+**Extension v1.1.0:** refreshed KCQ branding, local Manrope and Space Grotesk fonts, Chrome toolbar icons, and a light/dark theme shared between the side panel and settings.
+
 1. [Download the source ZIP](https://github.com/not-trent/kcq-cloud/archive/refs/heads/main.zip), extract it, and open `chrome://extensions` with **Developer mode** enabled.
 2. Click **Load unpacked** and select the extracted repository's `extension` folder.
 3. Open the extension's **Options** page and enter the shared Supabase settings below.
+
+**Updating an unpacked installation:** extract the latest download, replace the contents of your existing extension folder, then click **Reload** on its card at `chrome://extensions`. Reopen the side panel and Options page to see the new design. Keep the same installation and folder to retain your settings.
 
 ```text
 Supabase URL: https://ewcworrjwtjtmkekddbq.supabase.co
 Supabase anon/public key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3Y3dvcnJqd3RqdG1rZWtkZGJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyNjA4NjcsImV4cCI6MjEwNTgzNjg2N30.pouenhxDfoL4vDCzJGJ2wUKstIMcDeFym1fNk4xDysg
 ```
+
+## Extension preview
+
+<p align="center">
+  <img src="docs/images/extension-light.png" width="280" alt="KCQ Cloud extension in light mode with lime buttons and a branded search panel">
+  <img src="docs/images/extension-dark.png" width="280" alt="KCQ Cloud extension in dark mode with deep green surfaces">
+</p>
 
 ## Tech stack
 
