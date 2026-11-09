@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>KCQ Cloud settings</title><link rel="stylesheet" href="theme.css"></head><body class="options"><header class="brand-bar"><img src="icons/icon-48.png" width="40" height="40" alt=""><div class="brand-copy"><strong>KCQ Cloud</strong><small>Your shared question library</small></div><button id="themeToggle" class="secondary theme-toggle" type="button" aria-label="Switch to dark theme" aria-pressed="false">Dark</button></header><main><section class="intro"><p class="eyebrow">MAKE IT YOURS</p><h1>Your study space.</h1><p class="muted">One library. Your settings. A smarter way to study.</p></section><section class="surface settings-section"><p class="eyebrow">01 / CONNECTION</p><h2>Your shared library</h2><p class="muted">Connect to the Supabase library used by KCQ Cloud.</p>
+  <label>Supabase URL<br><input id="url" size="50" placeholder="https://xxxx.supabase.co"></label>
+  <label>Supabase anon key<br><input id="key" size="50" type="password"></label>
+  <button id="save">Save</button>
+  <span role="status" aria-live="polite" id="status"></span>
+
+  </section><section class="surface settings-section"><p class="eyebrow">02 / OPTIONAL</p><h2>Suggested answers</h2><p class="muted">Free models by default — OpenRouter's <code>:free</code> tier, no subscription and no card. Paste a key from openrouter.ai/keys; everything else stays as shown. The key is stored only in this browser profile.</p>
+  <label>Endpoint (OpenAI-compatible chat completions)<br><input id="aiEndpoint" size="50" placeholder="https://api.openai.com/v1/chat/completions"></label>
+  <label>Model<br><input id="aiModel" size="50" placeholder="dots-studio/dots-3-note-preview:free, nvidia/nemotron-3.5-lightning:free"></label>
+  <label>API key<br><input id="aiKey" size="50" type="password"></label>
+  <button id="saveAi">Save AI settings</button>
+  <span role="status" aria-live="polite" id="aiStatus"></span>
+
+  </section><section class="surface settings-section"><p class="eyebrow">03 / STUDY</p><h2>Module guides</h2><p class="muted">Answers first use the shared guide library in KCQ Cloud. The notes below are a local fallback for modules the library does not cover yet.</p>
+  <label>Module name (must match the course title)<br><input id="guideName" size="50"></label>
+  <label>Guide text (paste, or load a .txt / .md file)<br><textarea id="guideText" rows="8" cols="60"></textarea></label>
+  <input id="guideFile" type="file" accept=".txt,.md">
+  <button id="saveGuide">Save guide</button>
+  <ul id="guideList"></ul>
+  </section></main><footer>KCQ CLOUD HELPER <span>v1.3.1</span></footer><script src="theme.js"></script><script src="shared.js"></script><script src="options.js"></script></body></html>

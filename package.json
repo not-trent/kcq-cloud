@@ -9,7 +9,10 @@
     "dev": "npm run dev --workspace client",
     "build": "npm run build --workspace client",
     "supabase:check": "npm run check:supabase --workspace server",
-    "test:extension": "node extension/test/extension.test.mjs . && node extension/test/answer.test.mjs ."
+    "test:extension": "node extension/extension/test/extension.test.mjs . && node extension/extension/test/answer.test.mjs .",
+    "guides:plan": "node guides/scripts/build-plan.mjs",
+    "guides:validate": "node guides/scripts/validate-local.mjs",
+    "guides:ingest": "node guides/scripts/ingest.mjs"
   },
   "devDependencies": {
     "jsdom": "^30.1.3"

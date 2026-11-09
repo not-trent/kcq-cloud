@@ -1,0 +1,17 @@
+{
+  "classification": {},
+  "sources": {
+    "S0076": {
+      "completeness": "partial",
+      "flags": ["contents promise material past the end of the export (Units to Ethics p.170, Bibliography p.193)"]
+    },
+    "S0505": {
+      "completeness": "partial",
+      "flags": ["contents list References p.198 and Bibliography p.200, both absent from the export"]
+    },
+    "S0634": {
+      "completeness": "substantial",
+      "flags": ["bibliography survives through printed p.148", "page map covers only footers detected in text"]
+    }
+  }
+}

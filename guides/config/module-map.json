@@ -1,0 +1,10 @@
+{
+  "note": "Maps a recovered source to a KCQ Cloud module only when the evidence is explicit. status: validated = module and edition confirmed; proposed = name match awaiting review; leave unhit sources unassigned. Keys are source IDs from module-guide-inventory.json.",
+  "mappings": {
+    "S0806": {
+      "module_slug": "microeconomic-essentials-jul26-y1-s1",
+      "status": "proposed",
+      "evidence": "Guide title 'Microeconomic Essentials' matches the KCQ module name, but the guide's own stated edition/year has not been checked against Jul26 Y1 S1."
+    }
+  }
+}

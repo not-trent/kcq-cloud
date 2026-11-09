@@ -1,0 +1,4 @@
+node_modules/
+out/*
+!out/DRY-RUN-REPORT.md
+!out/VALIDATION-LOCAL.md

@@ -1,0 +1,15 @@
+{
+  "name": "kcq-guides",
+  "private": true,
+  "type": "module",
+  "description": "Local plan, ingest and validation tooling for the KCQ Cloud module-guide search library.",
+  "scripts": {
+    "plan": "node scripts/build-plan.mjs",
+    "ingest": "node scripts/ingest.mjs",
+    "validate": "node scripts/validate-local.mjs",
+    "test": "node test/classify.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.15"
+  }
+}

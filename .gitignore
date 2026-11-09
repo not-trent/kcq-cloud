@@ -16,3 +16,7 @@ progress.json
 .env*
 
 soundcatch/TEST/
+
+# Local build artifacts
+extension/*.zip
+supabase/.temp/
